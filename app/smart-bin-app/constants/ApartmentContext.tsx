@@ -341,10 +341,10 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasWarning = lobbies.some((lb) => {
-    // Chỉ cảnh báo khi thiết bị trạm sảnh đang cắm điện ONLINE
-    if (lb.status !== 'ONLINE') return false;
+    // Chỉ cảnh báo khi trạm có phần cứng thực tế (isHardwareSync) có rác đầy
+    if (!lb.isHardwareSync) return false;
     const limit = lb.threshold !== undefined ? lb.threshold : thresholdLimit;
-    return lb.bins && Object.values(lb.bins).some((b) => b.fill_percent >= limit);
+    return lb.bins && Object.values(lb.bins).some((b) => (b.fill_percent || 0) >= limit && (b.fill_percent || 0) > 0);
   });
 
   const alertedBinsRef = useRef<Set<string>>(new Set());
@@ -361,13 +361,8 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     };
 
     lobbies.forEach((lb) => {
-      // QUAN TRỌNG: Thiết bị trạm sảnh PHẢI được cắm điện và đang ONLINE thì mới quét cảm biến cảnh báo
-      if (lb.status !== 'ONLINE') {
-        ['organic', 'recycle', 'non_recycle', 'hazardous'].forEach((k) => {
-          alertedBinsRef.current.delete(`${lb.id}_${k}`);
-        });
-        return;
-      }
+      // Chỉ cảnh báo khi trạm có kết nối phần cứng thực tế (isHardwareSync)
+      if (!lb.isHardwareSync) return;
 
       const limit = lb.threshold !== undefined ? lb.threshold : thresholdLimit;
       if (!lb.bins) return;
@@ -376,7 +371,8 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
         const pct = Math.min(Math.max(Number(compData.fill_percent) || 0, 0), 100);
         const alertKey = `${lb.id}_${compKey}`;
 
-        if (pct >= limit) {
+        // Cảnh báo khi cảm biến đo được mức rác thật vượt ngưỡng
+        if (pct >= limit && pct > 0) {
           if (!alertedBinsRef.current.has(alertKey)) {
             alertedBinsRef.current.add(alertKey);
             const compName = compNames[compKey] || compKey;

@@ -38,16 +38,16 @@ export default function HomeScreen() {
     return lobbies.filter((s) => s.building === selectedBuilding);
   }, [lobbies, selectedBuilding]);
 
-  // Thống kê trạm đầy hoặc nguy cơ (chỉ tính khi thiết bị trạm đang cắm điện ONLINE)
+  // Thống kê trạm đầy hoặc nguy cơ (chỉ tính trạm có kết nối phần cứng thực tế và có mức rác thật)
   const fullLobbies = lobbies.filter((st) => {
-    if (st.status !== 'ONLINE') return false;
+    if (!st.isHardwareSync) return false;
     const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
-    return st.bins && Object.values(st.bins).some((b) => b.fill_percent >= limit);
+    return st.bins && Object.values(st.bins).some((b) => (b.fill_percent || 0) >= limit && (b.fill_percent || 0) > 0);
   });
   const atRiskLobbies = lobbies.filter((st) => {
-    if (st.status !== 'ONLINE') return false;
+    if (!st.isHardwareSync) return false;
     const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
-    return st.bins && Object.values(st.bins).some((b) => b.fill_percent >= limit - 15);
+    return st.bins && Object.values(st.bins).some((b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0);
   });
 
   // Hiển thị thông báo popup khi có trạm vượt ngưỡng (nếu cài đặt bật)
@@ -77,10 +77,6 @@ export default function HomeScreen() {
   }, [fullLobbies, notifyEnabled, thresholdLimit]);
 
   const getLobbyOverallStatus = (st: Lobby) => {
-    // Nếu trạm chưa cắm điện (OFFLINE), luôn hiển thị trạng thái Bình thường
-    if (st.status !== 'ONLINE') {
-      return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
-    }
     if (!st.bins || Object.keys(st.bins).length === 0) {
       return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
     }
@@ -88,10 +84,10 @@ export default function HomeScreen() {
     const fills = Object.values(st.bins).map((b) => b.fill_percent || 0);
     const maxPct = Math.max(...fills, 0);
 
-    if (maxPct >= limit) {
+    if (maxPct >= limit && maxPct > 0) {
       return { text: 'Cần thu gom', color: '#d32f2f', bg: '#ffebee', isFull: true };
     }
-    if (maxPct >= limit - 15) {
+    if (maxPct >= limit - 15 && maxPct > 0) {
       return { text: 'Sắp đầy', color: '#f57c00', bg: '#fff3e0', isFull: false };
     }
     return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
