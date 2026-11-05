@@ -64,11 +64,19 @@ export default function NotificationsScreen() {
     });
   };
 
-  // Lọc thông báo theo ngày và theo từng trạm sảnh
+  // Lọc thông báo theo ngày, chỉ hiển thị thông báo rác đầy để đến thu gom
   const filteredNotifications = useMemo(() => {
     return notifications.filter((item) => {
       const matchDate = !item.date || item.date === selectedDate;
       if (!matchDate) return false;
+
+      // Chỉ giữ lại thông báo rác đầy để đến thu gom, loại bỏ các bản ghi báo đã thu gom/làm sạch/reset
+      const isCollectionOrReset =
+        item.title?.toLowerCase().includes('đã thu gom') ||
+        item.desc?.toLowerCase().includes('đã làm sạch') ||
+        item.title?.toLowerCase().includes('đã dọn') ||
+        item.title?.toLowerCase().includes('reset');
+      if (isCollectionOrReset) return false;
 
       if (selectedLobbyFilter === 'ALL') return true;
 
@@ -97,7 +105,7 @@ export default function NotificationsScreen() {
       {/* ===== HEADER ===== */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Lịch Sử & Thông Báo</Text>
+          <Text style={styles.headerTitle}>Thông Báo Cần Thu Gom</Text>
         </View>
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}>{filteredNotifications.length}</Text>
@@ -200,11 +208,13 @@ export default function NotificationsScreen() {
         ) : (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Ionicons name="notifications-off-outline" size={38} color="#aaa" />
+              <Ionicons name="checkmark-circle-outline" size={38} color="#2e7d32" />
             </View>
-            <Text style={styles.emptyTitle}>Không có thông báo nào</Text>
+            <Text style={styles.emptyTitle}>Không có cảnh báo rác đầy</Text>
             <Text style={styles.emptyText}>
-              Các trạm sảnh trong ngày {selectedDate} đều hoạt động ổn định.
+              {selectedLobbyFilter === 'ALL'
+                ? `Tất cả các trạm sảnh trong ngày ${formatDateVN(selectedDate)} đều đang trong ngưỡng an toàn, chưa cần thu gom.`
+                : `Trạm sảnh này trong ngày ${formatDateVN(selectedDate)} đang trong ngưỡng an toàn, chưa cần thu gom.`}
             </Text>
           </View>
         )}

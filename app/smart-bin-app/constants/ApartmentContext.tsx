@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { get, onValue, push, ref, remove, set } from 'firebase/database';
 import { auth, db } from '../config/firebaseConfig';
@@ -330,6 +330,64 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     return lb.bins && Object.values(lb.bins).some((b) => b.fill_percent >= limit);
   });
 
+  const alertedBinsRef = useRef<Set<string>>(new Set());
+
+  // Tự động đẩy thông báo rác đầy lên Firebase khi có ngăn đạt/vượt ngưỡng để đến thu gom
+  useEffect(() => {
+    if (!notifyEnabled) return;
+
+    const compNames: Record<string, string> = {
+      organic: 'Hữu cơ',
+      recycle: 'Tái chế',
+      non_recycle: 'Vô cơ',
+      hazardous: 'Nguy hại',
+    };
+
+    lobbies.forEach((lb) => {
+      const limit = lb.threshold !== undefined ? lb.threshold : thresholdLimit;
+      if (!lb.bins) return;
+
+      Object.entries(lb.bins).forEach(([compKey, compData]) => {
+        const pct = Math.min(Math.max(Number(compData.fill_percent) || 0, 0), 100);
+        const alertKey = `${lb.id}_${compKey}`;
+
+        if (pct >= limit) {
+          if (!alertedBinsRef.current.has(alertKey)) {
+            alertedBinsRef.current.add(alertKey);
+            const compName = compNames[compKey] || compKey;
+            const timeNow = new Date().toLocaleTimeString('vi-VN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            const dateNow = new Date().toISOString().split('T')[0];
+
+            const notifRef = ref(db, 'smart_bin/notifications');
+            push(notifRef, {
+              lobbyId: lb.id,
+              lobbyName: lb.name,
+              building: lb.building,
+              location: lb.location,
+              title: `Cảnh báo rác đầy (${lb.name})`,
+              desc: `Ngăn ${compName} đã đạt ${pct}% (vượt ngưỡng ${limit}%). Cần điều phối nhân viên đến thu gom!`,
+              date: dateNow,
+              time: timeNow,
+              color: '#d32f2f',
+              icon: 'warning-outline',
+              type: 'FULL_ALERT',
+              binKey: compKey,
+              percent: pct,
+              threshold: limit,
+              timestamp: Date.now(),
+            }).catch((err) => console.warn('Lỗi gửi thông báo đầy:', err));
+          }
+        } else {
+          // Khi mức rác giảm xuống dưới ngưỡng (sau khi nhân viên đã thu gom), giải phóng để có thể cảnh báo tiếp
+          alertedBinsRef.current.delete(alertKey);
+        }
+      });
+    });
+  }, [lobbies, notifyEnabled, thresholdLimit]);
+
   const updateLobbyThreshold = async (lobbyId: string, threshold: number) => {
     setLobbies((prev) =>
       prev.map((l) => (l.id === lobbyId ? { ...l, threshold } : l))
@@ -427,18 +485,6 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     await set(lobbyDoorRef, false);
     const lobbyCleanRef = ref(db, `smart_bin/lobbies/${lobbyId}/lastCleaned`);
     await set(lobbyCleanRef, `Reset lúc ${timeNow}`);
-
-    // Đồng bộ thông báo reset
-    const notifRef = ref(db, 'smart_bin/notifications');
-    await push(notifRef, {
-      lobbyId,
-      title: `Đã reset trạm rác (${target?.name || lobbyId})`,
-      desc: `Toàn bộ mức đầy các ngăn đã đặt lại về 0%, đóng cửa servo và ổn định cảm biến.`,
-      date: new Date().toISOString().split('T')[0],
-      time: timeNow,
-      color: '#0288d1',
-      icon: 'refresh-circle-outline',
-    });
   };
 
   const configureWifi = async (lobbyId: string, ssid: string, pass: string) => {
@@ -492,19 +538,7 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
       await set(binsRef, cleanBins);
     }
 
-    // 1. Đồng bộ thông báo
-    const notifRef = ref(db, 'smart_bin/notifications');
-    await push(notifRef, {
-      lobbyId,
-      title: `Đã thu gom rác (${target?.name || lobbyId})`,
-      desc: `Nhân viên vệ sinh đã làm sạch 4 ngăn rác tại ${target?.location || ''}`,
-      date: new Date().toISOString().split('T')[0],
-      time: timeNow,
-      color: '#2e7d32',
-      icon: 'checkmark-circle-outline',
-    });
-
-    // 2. Đồng bộ lịch sử thu gom (smart_bin/history)
+    // Đồng bộ lịch sử thu gom (smart_bin/history)
     const historyRef = ref(db, 'smart_bin/history');
     await push(historyRef, {
       lobbyId,
