@@ -431,6 +431,7 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     // Đồng bộ thông báo reset
     const notifRef = ref(db, 'smart_bin/notifications');
     await push(notifRef, {
+      lobbyId,
       title: `Đã reset trạm rác (${target?.name || lobbyId})`,
       desc: `Toàn bộ mức đầy các ngăn đã đặt lại về 0%, đóng cửa servo và ổn định cảm biến.`,
       date: new Date().toISOString().split('T')[0],
@@ -494,6 +495,7 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     // 1. Đồng bộ thông báo
     const notifRef = ref(db, 'smart_bin/notifications');
     await push(notifRef, {
+      lobbyId,
       title: `Đã thu gom rác (${target?.name || lobbyId})`,
       desc: `Nhân viên vệ sinh đã làm sạch 4 ngăn rác tại ${target?.location || ''}`,
       date: new Date().toISOString().split('T')[0],

@@ -18,7 +18,6 @@ export default function HomeScreen() {
     thresholdLimit,
     hasWarning,
     notifyEnabled,
-    markLobbyCleaned,
   } = useSmartBin();
 
   const [selectedBuilding, setSelectedBuilding] = useState<string>('ALL');
@@ -90,21 +89,6 @@ export default function HomeScreen() {
       return { text: 'Sắp đầy', color: '#f57c00', bg: '#fff3e0', isFull: false };
     }
     return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
-  };
-
-  const handleCleanLobby = (st: Lobby) => {
-    Alert.alert(
-      'Xác nhận thu gom rác',
-      `Bạn xác nhận đã thu gom và làm sạch các ngăn rác tại "${st.name}"?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xác nhận xong',
-          style: 'default',
-          onPress: () => markLobbyCleaned(st.id),
-        },
-      ]
-    );
   };
 
   return (
@@ -224,12 +208,6 @@ export default function HomeScreen() {
           const nonRecycleData = st.bins?.non_recycle || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
           const hazardousData = st.bins?.hazardous || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
 
-          const organicPct = Number(organicData.fill_percent) || 0;
-          const recyclePct = Number(recycleData.fill_percent) || 0;
-          const nonRecyclePct = Number(nonRecycleData.fill_percent) || 0;
-          const hazardousPct = Number(hazardousData.fill_percent) || 0;
-          const hasWaste = organicPct > 0 || recyclePct > 0 || nonRecyclePct > 0 || hazardousPct > 0;
-
           const binItems = [
             { name: 'Hữu cơ', color: '#2e7d32', data: organicData },
             { name: 'Tái chế', color: '#0288d1', data: recycleData },
@@ -306,27 +284,11 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              {/* Lobby Footer Actions */}
+              {/* Lobby Footer */}
               <View style={styles.lobbyFooter}>
                 <Text style={styles.lastCleanText}>
                   <Ionicons name="time-outline" size={11} color="#888" /> Thu gom: {st.lastCleaned || 'Hôm nay'}
                 </Text>
-
-                <View style={styles.lobbyFooterButtons}>
-                  <TouchableOpacity
-                    style={hasWaste ? styles.cleanBtnNeed : styles.cleanBtnDone}
-                    onPress={() => handleCleanLobby(st)}
-                  >
-                    <Ionicons
-                      name={hasWaste ? 'trash-outline' : 'checkmark-done'}
-                      size={14}
-                      color={hasWaste ? '#ffffff' : '#1b5e20'}
-                    />
-                    <Text style={hasWaste ? styles.cleanBtnNeedText : styles.cleanBtnDoneText}>
-                      {hasWaste ? 'Thu gom' : '✓ Đã dọn xong'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
               </View>
             </View>
           );
@@ -512,32 +474,4 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   lastCleanText: { fontSize: 10, color: '#888' },
-  lobbyFooterButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cleanBtnNeed: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1b5e20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 4,
-    elevation: 2,
-    shadowColor: '#1b5e20',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  cleanBtnNeedText: { fontSize: 12, fontWeight: 'bold', color: '#ffffff' },
-  cleanBtnDone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e8f5e9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#c8e6c9',
-  },
-  cleanBtnDoneText: { fontSize: 12, fontWeight: 'bold', color: '#1b5e20' },
 });

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // Import Firebase Realtime Database
 import { onValue, ref } from 'firebase/database';
 import { db } from '../../config/firebaseConfig';
+import { useSmartBin } from '../../constants/ApartmentContext';
 
 // Cấu hình tiếng Việt cho lịch
 LocaleConfig.locales['vi'] = {
@@ -19,10 +20,11 @@ LocaleConfig.locales['vi'] = {
 LocaleConfig.defaultLocale = 'vi';
 
 export default function NotificationsScreen() {
+  const { lobbies } = useSmartBin();
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [calendarVisible, setCalendarVisible] = useState(false);
-  const [filterType, setFilterType] = useState<'ALL' | 'WARN' | 'CLEAN'>('ALL');
+  const [selectedLobbyFilter, setSelectedLobbyFilter] = useState<string>('ALL');
 
   // State lưu trữ danh sách thông báo lấy từ Firebase
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -62,26 +64,33 @@ export default function NotificationsScreen() {
     });
   };
 
-  // Lọc thông báo theo ngày và theo loại
+  // Lọc thông báo theo ngày và theo từng trạm sảnh
   const filteredNotifications = useMemo(() => {
     return notifications.filter((item) => {
       const matchDate = !item.date || item.date === selectedDate;
       if (!matchDate) return false;
 
-      if (filterType === 'WARN') {
-        return item.color === '#d32f2f' || item.title?.includes('Cảnh báo') || item.title?.includes('đầy');
-      }
-      if (filterType === 'CLEAN') {
-        return (
-          item.color === '#2e7d32' ||
-          item.color === '#1b5e20' ||
-          item.title?.includes('thu gom') ||
-          item.title?.includes('dọn')
-        );
-      }
-      return true;
+      if (selectedLobbyFilter === 'ALL') return true;
+
+      const targetLobby = lobbies.find((lb) => lb.id === selectedLobbyFilter);
+      if (!targetLobby) return false;
+
+      if (item.lobbyId && item.lobbyId === selectedLobbyFilter) return true;
+
+      const tLower = (item.title || '').toLowerCase();
+      const dLower = (item.desc || '').toLowerCase();
+      const nameLower = targetLobby.name.toLowerCase();
+      const buildingLower = targetLobby.building ? targetLobby.building.toLowerCase() : '';
+      const locLower = targetLobby.location ? targetLobby.location.toLowerCase() : '';
+
+      return (
+        tLower.includes(nameLower) ||
+        dLower.includes(nameLower) ||
+        (buildingLower !== '' && (tLower.includes(buildingLower) || dLower.includes(buildingLower))) ||
+        (locLower !== '' && dLower.includes(locLower))
+      );
     });
-  }, [notifications, selectedDate, filterType]);
+  }, [notifications, selectedDate, selectedLobbyFilter, lobbies]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -89,9 +98,6 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Lịch Sử & Thông Báo</Text>
-          <Text style={styles.headerSubtitle}>
-            Đồng bộ thời gian thực từ Firebase ({notifications.length} bản ghi)
-          </Text>
         </View>
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}>{filteredNotifications.length}</Text>
@@ -121,35 +127,50 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ===== TYPE FILTER CHIPS ===== */}
+        {/* ===== STATION FILTER CHIPS ===== */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterChipScroll}
         >
-          {[
-            { key: 'ALL', label: 'Tất cả' },
-            { key: 'WARN', label: 'Cảnh báo đầy' },
-            { key: 'CLEAN', label: 'Lịch sử thu gom' },
-          ].map((f) => (
-            <TouchableOpacity
-              key={f.key}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedLobbyFilter === 'ALL' && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedLobbyFilter('ALL')}
+          >
+            <Text
               style={[
-                styles.filterChip,
-                filterType === f.key && styles.filterChipActive,
+                styles.filterChipText,
+                selectedLobbyFilter === 'ALL' && styles.filterChipTextActive,
               ]}
-              onPress={() => setFilterType(f.key as any)}
             >
-              <Text
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+          {lobbies.map((lb) => {
+            const isSelected = selectedLobbyFilter === lb.id;
+            return (
+              <TouchableOpacity
+                key={lb.id}
                 style={[
-                  styles.filterChipText,
-                  filterType === f.key && styles.filterChipTextActive,
+                  styles.filterChip,
+                  isSelected && styles.filterChipActive,
                 ]}
+                onPress={() => setSelectedLobbyFilter(lb.id)}
               >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    isSelected && styles.filterChipTextActive,
+                  ]}
+                >
+                  {lb.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* ===== NOTIFICATIONS LIST ===== */}
@@ -249,7 +270,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  headerSubtitle: { fontSize: 11, color: '#c8e6c9', marginTop: 2 },
   headerBadge: {
     backgroundColor: 'rgba(255,255,255,0.25)',
     minWidth: 28,
