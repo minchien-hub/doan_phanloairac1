@@ -314,22 +314,16 @@ export default function HomeScreen() {
 
                 <View style={styles.lobbyFooterButtons}>
                   <TouchableOpacity
-                    style={[styles.cleanBtn, !hasWaste && styles.cleanBtnDisabled]}
-                    disabled={!hasWaste}
+                    style={hasWaste ? styles.cleanBtnNeed : styles.cleanBtnDone}
                     onPress={() => handleCleanLobby(st)}
                   >
                     <Ionicons
-                      name="checkmark-done"
+                      name={hasWaste ? 'trash-outline' : 'checkmark-done'}
                       size={14}
-                      color={hasWaste ? '#1b5e20' : '#9e9e9e'}
+                      color={hasWaste ? '#ffffff' : '#1b5e20'}
                     />
-                    <Text
-                      style={[
-                        styles.cleanBtnText,
-                        !hasWaste && styles.cleanBtnTextDisabled,
-                      ]}
-                    >
-                      Đã dọn
+                    <Text style={hasWaste ? styles.cleanBtnNeedText : styles.cleanBtnDoneText}>
+                      {hasWaste ? 'Thu gom' : '✓ Đã dọn xong'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -519,7 +513,22 @@ const styles = StyleSheet.create({
   },
   lastCleanText: { fontSize: 10, color: '#888' },
   lobbyFooterButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cleanBtn: {
+  cleanBtnNeed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1b5e20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+    elevation: 2,
+    shadowColor: '#1b5e20',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  cleanBtnNeedText: { fontSize: 12, fontWeight: 'bold', color: '#ffffff' },
+  cleanBtnDone: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#e8f5e9',
@@ -529,19 +538,6 @@ const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
     borderColor: '#c8e6c9',
-    elevation: 2,
-    shadowColor: '#1b5e20',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
   },
-  cleanBtnText: { fontSize: 12, fontWeight: 'bold', color: '#1b5e20' },
-  cleanBtnDisabled: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#e0e0e0',
-    elevation: 0,
-    shadowOpacity: 0,
-    opacity: 0.5,
-  },
-  cleanBtnTextDisabled: { color: '#9e9e9e' },
+  cleanBtnDoneText: { fontSize: 12, fontWeight: 'bold', color: '#1b5e20' },
 });
