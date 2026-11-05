@@ -283,13 +283,6 @@ export default function HomeScreen() {
                   );
                 })}
               </View>
-
-              {/* Lobby Footer */}
-              <View style={styles.lobbyFooter}>
-                <Text style={styles.lastCleanText}>
-                  <Ionicons name="time-outline" size={11} color="#888" /> Thu gom: {st.lastCleaned || 'Hôm nay'}
-                </Text>
-              </View>
             </View>
           );
         })}
@@ -455,7 +448,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     gap: 8,
-    marginBottom: 12,
   },
   binCol: { flex: 1 },
   binColHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
@@ -463,15 +455,4 @@ const styles = StyleSheet.create({
   binColPct: { fontSize: 10, fontWeight: 'bold' },
   miniBarBg: { height: 6, backgroundColor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' },
   miniBarFill: { height: '100%', borderRadius: 3 },
-
-  // Footer
-  lobbyFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 10,
-  },
-  lastCleanText: { fontSize: 10, color: '#888' },
 });
