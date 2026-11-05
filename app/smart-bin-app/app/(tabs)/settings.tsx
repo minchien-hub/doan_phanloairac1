@@ -610,7 +610,8 @@ export default function SettingsScreen() {
                 keyboardType="numeric"
                 value={thresholdInput}
                 onChangeText={setThresholdInput}
-                maxLength={2}
+                maxLength={3}
+                textAlignVertical="center"
               />
             </View>
 
@@ -950,14 +951,18 @@ const styles = StyleSheet.create({
   thresholdLabel: { fontSize: 13, fontWeight: 'bold', color: '#333' },
   thresholdHelper: { fontSize: 11, color: '#888', marginTop: 2 },
   thresholdInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#1b5e20',
     backgroundColor: '#fff',
-    width: 60,
-    height: 38,
+    width: 70,
+    height: 44,
     borderRadius: 8,
     textAlign: 'center',
-    fontSize: 16,
+    textAlignVertical: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 6,
+    includeFontPadding: false,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#1b5e20',
   },
