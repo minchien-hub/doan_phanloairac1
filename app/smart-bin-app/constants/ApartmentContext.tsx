@@ -29,6 +29,7 @@ export interface Lobby {
   is_door_open?: boolean;
   lastCleaned?: string;
   wifi_ssid?: string;
+  threshold?: number;
   bins: Record<string, BinCompartment>;
 }
 
@@ -41,6 +42,7 @@ interface SmartBinContextType {
   selectedLobby: Lobby;
   thresholdLimit: number;
   setThresholdLimit: (val: number) => void;
+  updateLobbyThreshold: (lobbyId: string, threshold: number) => Promise<void>;
   notifyEnabled: boolean;
   updateNotifyEnabled: (val: boolean) => Promise<void>;
   hasWarning: boolean;
@@ -63,6 +65,7 @@ const DEFAULT_LOBBIES: Lobby[] = [
     camera_url: '',
     is_door_open: false,
     lastCleaned: 'Hôm nay, 08:30',
+    threshold: 80,
     bins: {
       organic: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
       recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
@@ -79,6 +82,7 @@ const DEFAULT_LOBBIES: Lobby[] = [
     camera_url: '',
     is_door_open: false,
     lastCleaned: 'Hôm qua, 17:00',
+    threshold: 80,
     bins: {
       organic: { fill_percent: 45, distance_cm: 28, status: 'NORMAL', sensor_ok: true },
       recycle: { fill_percent: 78, distance_cm: 12, status: 'WARNING', sensor_ok: true },
@@ -95,6 +99,7 @@ const DEFAULT_LOBBIES: Lobby[] = [
     camera_url: '',
     is_door_open: false,
     lastCleaned: 'Hôm nay, 06:15',
+    threshold: 80,
     bins: {
       organic: { fill_percent: 88, distance_cm: 6, status: 'FULL', sensor_ok: true },
       recycle: { fill_percent: 60, distance_cm: 20, status: 'NORMAL', sensor_ok: true },
@@ -111,6 +116,7 @@ const DEFAULT_LOBBIES: Lobby[] = [
     camera_url: '',
     is_door_open: false,
     lastCleaned: 'Hôm nay, 10:00',
+    threshold: 80,
     bins: {
       organic: { fill_percent: 65, distance_cm: 18, status: 'NORMAL', sensor_ok: true },
       recycle: { fill_percent: 85, distance_cm: 8, status: 'FULL', sensor_ok: true },
@@ -319,9 +325,26 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     return () => unsubLobbies();
   }, []);
 
-  const hasWarning = lobbies.some((lb) =>
-    lb.bins && Object.values(lb.bins).some((b) => b.fill_percent >= thresholdLimit)
-  );
+  const hasWarning = lobbies.some((lb) => {
+    const limit = lb.threshold !== undefined ? lb.threshold : thresholdLimit;
+    return lb.bins && Object.values(lb.bins).some((b) => b.fill_percent >= limit);
+  });
+
+  const updateLobbyThreshold = async (lobbyId: string, threshold: number) => {
+    setLobbies((prev) =>
+      prev.map((l) => (l.id === lobbyId ? { ...l, threshold } : l))
+    );
+
+    const target = lobbies.find((l) => l.id === lobbyId);
+    if (target?.isHardwareSync) {
+      const settingsThresholdRef = ref(db, 'smart_bin/settings/threshold');
+      await set(settingsThresholdRef, threshold);
+      setThresholdLimit(threshold);
+    }
+
+    const lobbyThresholdRef = ref(db, `smart_bin/lobbies/${lobbyId}/threshold`);
+    await set(lobbyThresholdRef, threshold);
+  };
 
   const toggleDoor = async (lobbyId: string, open: boolean) => {
     const cmd = open ? 'OPEN' : 'CLOSE';
@@ -518,6 +541,7 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
         selectedLobby,
         thresholdLimit,
         setThresholdLimit,
+        updateLobbyThreshold,
         notifyEnabled,
         updateNotifyEnabled,
         hasWarning,

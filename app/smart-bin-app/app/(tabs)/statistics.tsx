@@ -116,7 +116,7 @@ export default function StatisticsScreen() {
             <View style={styles.thresholdBadge}>
               <Ionicons name="speedometer-outline" size={11} color="#e65100" />
               <Text style={styles.thresholdBadgeText}>
-                Ngưỡng: {(selectedLobby as any).threshold || thresholdLimit}%
+                Ngưỡng: {selectedLobby.threshold !== undefined ? selectedLobby.threshold : thresholdLimit}%
               </Text>
             </View>
 

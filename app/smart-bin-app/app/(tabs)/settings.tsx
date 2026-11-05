@@ -23,6 +23,7 @@ export default function SettingsScreen() {
     userProfile,
     thresholdLimit,
     setThresholdLimit,
+    updateLobbyThreshold,
     notifyEnabled,
     updateNotifyEnabled,
     lobbies,
@@ -35,6 +36,8 @@ export default function SettingsScreen() {
   // Modal Ngưỡng Cảnh Báo
   const [thresholdModalVisible, setThresholdModalVisible] = useState(false);
   const [thresholdInput, setThresholdInput] = useState(String(thresholdLimit));
+  const [targetThresholdLobbyId, setTargetThresholdLobbyId] = useState<string>('');
+  const targetThresholdLobby = lobbies.find((l) => l.id === targetThresholdLobbyId) || lobbies[0];
 
   // Modal Danh Sách Trạm Rác
   const [stationListModalVisible, setStationListModalVisible] = useState(false);
@@ -58,11 +61,18 @@ export default function SettingsScreen() {
   // 1. Xử lý lưu ngưỡng cảnh báo
   const executeSaveThreshold = async (parsed: number) => {
     try {
-      const settingsRef = ref(db, 'smart_bin/settings/threshold');
-      await set(settingsRef, parsed);
-      setThresholdLimit(parsed);
-      setThresholdModalVisible(false);
-      Alert.alert('Thành công', `Đã cập nhật ngưỡng cảnh báo rác đầy thành ${parsed}%!`);
+      if (targetThresholdLobbyId) {
+        await updateLobbyThreshold(targetThresholdLobbyId, parsed);
+        const targetSt = lobbies.find((l) => l.id === targetThresholdLobbyId);
+        setThresholdModalVisible(false);
+        Alert.alert('Thành công', `Đã cập nhật ngưỡng cảnh báo của "${targetSt?.name || 'trạm'}" thành ${parsed}%!`);
+      } else {
+        const settingsRef = ref(db, 'smart_bin/settings/threshold');
+        await set(settingsRef, parsed);
+        setThresholdLimit(parsed);
+        setThresholdModalVisible(false);
+        Alert.alert('Thành công', `Đã cập nhật ngưỡng cảnh báo rác đầy thành ${parsed}%!`);
+      }
     } catch (error: any) {
       Alert.alert('Lỗi', 'Không thể lưu cài đặt: ' + error.message);
     }
@@ -419,12 +429,15 @@ export default function SettingsScreen() {
                       <TouchableOpacity
                         style={styles.actionBtnThreshold}
                         onPress={() => {
-                          setThresholdInput(String(thresholdLimit));
+                          setTargetThresholdLobbyId(st.id);
+                          setThresholdInput(String(st.threshold !== undefined ? st.threshold : thresholdLimit));
                           setThresholdModalVisible(true);
                         }}
                       >
                         <Ionicons name="speedometer-outline" size={13} color="#e65100" />
-                        <Text style={styles.actionBtnThresholdText}>Ngưỡng</Text>
+                        <Text style={styles.actionBtnThresholdText}>
+                          Ngưỡng ({st.threshold !== undefined ? st.threshold : thresholdLimit}%)
+                        </Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -590,14 +603,24 @@ export default function SettingsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Cài Đặt Ngưỡng Cảnh Báo</Text>
+              <View>
+                <Text style={styles.modalTitle}>Cài Đặt Ngưỡng Cảnh Báo</Text>
+                {targetThresholdLobby && (
+                  <Text style={styles.modalSubHeader}>
+                    {targetThresholdLobby.name} ({targetThresholdLobby.building})
+                  </Text>
+                )}
+              </View>
               <TouchableOpacity onPress={() => setThresholdModalVisible(false)}>
                 <Ionicons name="close" size={22} color="#666" />
               </TouchableOpacity>
             </View>
 
             <Text style={styles.modalSub}>
-              Mức mặc định là <Text style={{ fontWeight: 'bold', color: '#1b5e20' }}>80%</Text>. Khi ngăn rác đạt ngưỡng này, hệ thống sẽ tự động kích hoạt cảnh báo nhắc nhân viên đi thu gom.
+              Cài đặt ngưỡng cảnh báo độc lập cho trạm{' '}
+              <Text style={{ fontWeight: 'bold', color: '#1b5e20' }}>
+                {targetThresholdLobby?.name || 'này'}
+              </Text>. Khi bất kỳ ngăn rác nào tại trạm đạt ngưỡng này, hệ thống sẽ tự động kích hoạt cảnh báo nhắc nhân viên đi thu gom.
             </Text>
 
             <View style={styles.thresholdContainer}>

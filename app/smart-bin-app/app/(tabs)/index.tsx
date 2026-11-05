@@ -40,12 +40,14 @@ export default function HomeScreen() {
   }, [lobbies, selectedBuilding]);
 
   // Thống kê trạm đầy hoặc nguy cơ
-  const fullLobbies = lobbies.filter((st) =>
-    st.bins && Object.values(st.bins).some((b) => b.fill_percent >= thresholdLimit)
-  );
-  const atRiskLobbies = lobbies.filter((st) =>
-    st.bins && Object.values(st.bins).some((b) => b.fill_percent >= thresholdLimit - 15)
-  );
+  const fullLobbies = lobbies.filter((st) => {
+    const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
+    return st.bins && Object.values(st.bins).some((b) => b.fill_percent >= limit);
+  });
+  const atRiskLobbies = lobbies.filter((st) => {
+    const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
+    return st.bins && Object.values(st.bins).some((b) => b.fill_percent >= limit - 15);
+  });
 
   // Hiển thị thông báo popup khi có trạm vượt ngưỡng (nếu cài đặt bật)
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function HomeScreen() {
       const names = unalertedFullLobbies.map((s) => `${s.name} (${s.building})`).join('\n• ');
       Alert.alert(
         'Cảnh Báo Rác Đầy! ⚠️',
-        `Phát hiện trạm rác đã đạt hoặc vượt ngưỡng ${thresholdLimit}%:\n\n• ${names}\n\nVui lòng nhanh chóng điều phối nhân viên thu gom rác.`
+        `Phát hiện trạm rác đã đạt hoặc vượt ngưỡng cảnh báo:\n\n• ${names}\n\nVui lòng nhanh chóng điều phối nhân viên thu gom rác.`
       );
     }
 
@@ -77,13 +79,14 @@ export default function HomeScreen() {
     if (!st.bins || Object.keys(st.bins).length === 0) {
       return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
     }
+    const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
     const fills = Object.values(st.bins).map((b) => b.fill_percent || 0);
     const maxPct = Math.max(...fills, 0);
 
-    if (maxPct >= thresholdLimit) {
+    if (maxPct >= limit) {
       return { text: 'Cần thu gom', color: '#d32f2f', bg: '#ffebee', isFull: true };
     }
-    if (maxPct >= thresholdLimit - 15) {
+    if (maxPct >= limit - 15) {
       return { text: 'Sắp đầy', color: '#f57c00', bg: '#fff3e0', isFull: false };
     }
     return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
@@ -272,7 +275,8 @@ export default function HomeScreen() {
               <View style={styles.binsGrid}>
                 {binItems.map((comp) => {
                   const pct = Math.min(Math.max(comp.data.fill_percent || 0, 0), 100);
-                  const isCompFull = pct >= thresholdLimit;
+                  const stThreshold = st.threshold !== undefined ? st.threshold : thresholdLimit;
+                  const isCompFull = pct >= stThreshold;
                   return (
                     <View key={comp.name} style={styles.binCol}>
                       <View style={styles.binColHeader}>
