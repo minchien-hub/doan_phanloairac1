@@ -38,12 +38,14 @@ export default function HomeScreen() {
     return lobbies.filter((s) => s.building === selectedBuilding);
   }, [lobbies, selectedBuilding]);
 
-  // Thống kê trạm đầy hoặc nguy cơ
+  // Thống kê trạm đầy hoặc nguy cơ (chỉ tính khi thiết bị trạm đang cắm điện ONLINE)
   const fullLobbies = lobbies.filter((st) => {
+    if (st.status !== 'ONLINE') return false;
     const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
     return st.bins && Object.values(st.bins).some((b) => b.fill_percent >= limit);
   });
   const atRiskLobbies = lobbies.filter((st) => {
+    if (st.status !== 'ONLINE') return false;
     const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
     return st.bins && Object.values(st.bins).some((b) => b.fill_percent >= limit - 15);
   });
@@ -75,6 +77,10 @@ export default function HomeScreen() {
   }, [fullLobbies, notifyEnabled, thresholdLimit]);
 
   const getLobbyOverallStatus = (st: Lobby) => {
+    // Nếu trạm chưa cắm điện (OFFLINE), luôn hiển thị trạng thái Bình thường
+    if (st.status !== 'ONLINE') {
+      return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
+    }
     if (!st.bins || Object.keys(st.bins).length === 0) {
       return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
     }

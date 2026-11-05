@@ -81,13 +81,13 @@ const DEFAULT_LOBBIES: Lobby[] = [
     status: 'OFFLINE',
     camera_url: '',
     is_door_open: false,
-    lastCleaned: 'Hôm qua, 17:00',
+    lastCleaned: 'Hôm nay',
     threshold: 80,
     bins: {
-      organic: { fill_percent: 45, distance_cm: 28, status: 'NORMAL', sensor_ok: true },
-      recycle: { fill_percent: 78, distance_cm: 12, status: 'WARNING', sensor_ok: true },
-      non_recycle: { fill_percent: 30, distance_cm: 35, status: 'NORMAL', sensor_ok: true },
-      hazardous: { fill_percent: 10, distance_cm: 45, status: 'NORMAL', sensor_ok: true },
+      organic: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      non_recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      hazardous: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
     },
   },
   {
@@ -98,13 +98,13 @@ const DEFAULT_LOBBIES: Lobby[] = [
     status: 'OFFLINE',
     camera_url: '',
     is_door_open: false,
-    lastCleaned: 'Hôm nay, 06:15',
+    lastCleaned: 'Hôm nay',
     threshold: 80,
     bins: {
-      organic: { fill_percent: 88, distance_cm: 6, status: 'FULL', sensor_ok: true },
-      recycle: { fill_percent: 60, distance_cm: 20, status: 'NORMAL', sensor_ok: true },
-      non_recycle: { fill_percent: 92, distance_cm: 4, status: 'FULL', sensor_ok: true },
-      hazardous: { fill_percent: 25, distance_cm: 38, status: 'NORMAL', sensor_ok: true },
+      organic: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      non_recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      hazardous: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
     },
   },
   {
@@ -115,13 +115,13 @@ const DEFAULT_LOBBIES: Lobby[] = [
     status: 'OFFLINE',
     camera_url: '',
     is_door_open: false,
-    lastCleaned: 'Hôm nay, 10:00',
+    lastCleaned: 'Hôm nay',
     threshold: 80,
     bins: {
-      organic: { fill_percent: 65, distance_cm: 18, status: 'NORMAL', sensor_ok: true },
-      recycle: { fill_percent: 85, distance_cm: 8, status: 'FULL', sensor_ok: true },
-      non_recycle: { fill_percent: 70, distance_cm: 15, status: 'WARNING', sensor_ok: true },
-      hazardous: { fill_percent: 15, distance_cm: 42, status: 'NORMAL', sensor_ok: true },
+      organic: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      non_recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
+      hazardous: { fill_percent: 0, distance_cm: 0, status: 'NORMAL', sensor_ok: true },
     },
   },
 ];
@@ -291,6 +291,21 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
             set(lbStatusRef, 'OFFLINE');
             lb.status = 'OFFLINE';
           }
+          // Nếu trạm không có phần cứng đồng bộ thật, đặt lại bins về 0% và đồng bộ Firebase để tránh dữ liệu ảo
+          if (!lb.isHardwareSync) {
+            const hasWaste = lb.bins && Object.values(lb.bins).some((b) => (b.fill_percent || 0) > 0);
+            if (hasWaste) {
+              const cleanBins = {
+                organic: { fill_percent: 0, distance_cm: 0, status: 'NORMAL' as const, sensor_ok: true },
+                recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL' as const, sensor_ok: true },
+                non_recycle: { fill_percent: 0, distance_cm: 0, status: 'NORMAL' as const, sensor_ok: true },
+                hazardous: { fill_percent: 0, distance_cm: 0, status: 'NORMAL' as const, sensor_ok: true },
+              };
+              lb.bins = cleanBins;
+              const lbBinsRef = ref(db, `smart_bin/lobbies/${lb.id}/bins`);
+              set(lbBinsRef, cleanBins);
+            }
+          }
         });
 
         setLobbies((prev) => {
@@ -326,6 +341,8 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasWarning = lobbies.some((lb) => {
+    // Chỉ cảnh báo khi thiết bị trạm sảnh đang cắm điện ONLINE
+    if (lb.status !== 'ONLINE') return false;
     const limit = lb.threshold !== undefined ? lb.threshold : thresholdLimit;
     return lb.bins && Object.values(lb.bins).some((b) => b.fill_percent >= limit);
   });
@@ -344,6 +361,14 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     };
 
     lobbies.forEach((lb) => {
+      // QUAN TRỌNG: Thiết bị trạm sảnh PHẢI được cắm điện và đang ONLINE thì mới quét cảm biến cảnh báo
+      if (lb.status !== 'ONLINE') {
+        ['organic', 'recycle', 'non_recycle', 'hazardous'].forEach((k) => {
+          alertedBinsRef.current.delete(`${lb.id}_${k}`);
+        });
+        return;
+      }
+
       const limit = lb.threshold !== undefined ? lb.threshold : thresholdLimit;
       if (!lb.bins) return;
 
@@ -387,6 +412,28 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
       });
     });
   }, [lobbies, notifyEnabled, thresholdLimit]);
+
+  // Dọn dẹp các thông báo rác đầy giả lập từ dữ liệu mẫu cũ khi thiết bị chưa cắm điện
+  useEffect(() => {
+    const notifRef = ref(db, 'smart_bin/notifications');
+    get(notifRef)
+      .then((snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          Object.keys(data).forEach((key) => {
+            const item = data[key];
+            if (
+              item.title?.includes('Sảnh Khu Thương Mại') ||
+              item.title?.includes('Sảnh Tòa C') ||
+              item.title?.includes('Sảnh Tòa B')
+            ) {
+              remove(ref(db, `smart_bin/notifications/${key}`));
+            }
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const updateLobbyThreshold = async (lobbyId: string, threshold: number) => {
     setLobbies((prev) =>
