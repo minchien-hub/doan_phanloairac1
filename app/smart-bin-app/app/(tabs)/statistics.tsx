@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ComponentProps, useEffect } from 'react';
+import { ComponentProps, useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -40,15 +40,27 @@ export default function StatisticsScreen() {
     thresholdLimit,
   } = useSmartBin();
 
+  const [activeLobbyId, setActiveLobbyId] = useState<string>(
+    params.lobbyId || selectedLobbyId || 'lobby_a'
+  );
+
   useEffect(() => {
-    if (params.lobbyId && params.lobbyId !== selectedLobbyId) {
+    if (params.lobbyId) {
+      setActiveLobbyId(params.lobbyId);
       setSelectedLobbyId(params.lobbyId);
     }
   }, [params.lobbyId]);
 
+  const handleSelectLobby = (lobbyId: string) => {
+    setActiveLobbyId(lobbyId);
+    setSelectedLobbyId(lobbyId);
+  };
+
   const currentLobby =
-    lobbies.find((l) => l.id === (params.lobbyId || selectedLobbyId)) ||
-    selectedLobby;
+    lobbies.find((l) => l.id === activeLobbyId) ||
+    lobbies.find((l) => l.id === selectedLobbyId) ||
+    selectedLobby ||
+    lobbies[0];
 
   const handleToggleDoor = async (value: boolean) => {
     try {
@@ -108,7 +120,8 @@ export default function StatisticsScreen() {
                 <TouchableOpacity
                   key={st.id}
                   style={[styles.lobbyChip, isSelected && styles.lobbyChipActive]}
-                  onPress={() => setSelectedLobbyId(st.id)}
+                  onPress={() => handleSelectLobby(st.id)}
+                  activeOpacity={0.7}
                 >
                   <Ionicons
                     name="business-outline"
@@ -259,6 +272,7 @@ export default function StatisticsScreen() {
 
         <View style={styles.card}>
           {binEntries.map((sensor, idx) => {
+            const dist = Math.round(Number(sensor.distance_cm) || 0);
             return (
               <View
                 key={sensor.key}
@@ -297,13 +311,7 @@ export default function StatisticsScreen() {
                     <View style={styles.sensorMetric}>
                       <Ionicons name="resize-outline" size={13} color="#666" />
                       <Text style={styles.sensorMetricText}>
-                        Khoảng cách: {Math.round(Number(sensor.distance_cm) || 0)} cm
-                      </Text>
-                    </View>
-                    <View style={styles.sensorMetric}>
-                      <Ionicons name="speedometer-outline" size={13} color="#666" />
-                      <Text style={styles.sensorMetricText}>
-                        Mức đầy: {Math.round(Number(sensor.fill_percent) || 0)}%
+                        Khoảng cách: {dist > 0 ? `${dist} cm` : '0 cm'}
                       </Text>
                     </View>
                   </View>

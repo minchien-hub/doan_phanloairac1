@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ComponentProps, useEffect } from 'react';
+import { ComponentProps, useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -40,16 +40,30 @@ export default function MonitorScreen() {
     thresholdLimit,
   } = useSmartBin();
 
-  // Đồng bộ ID trạm khi nhận param từ Dashboard
+  // Quản lý ID trạm sảnh đang được chọn hiển thị, mặc định ưu tiên param từ màn hình trước
+  const [activeLobbyId, setActiveLobbyId] = useState<string>(
+    params.lobbyId || selectedLobbyId || 'lobby_a'
+  );
+
+  // Cập nhật khi nhận param từ Dashboard
   useEffect(() => {
-    if (params.lobbyId && params.lobbyId !== selectedLobbyId) {
+    if (params.lobbyId) {
+      setActiveLobbyId(params.lobbyId);
       setSelectedLobbyId(params.lobbyId);
     }
   }, [params.lobbyId]);
 
+  // Chuyển đổi sảnh nhanh khi bấm vào các chip sảnh
+  const handleSelectLobby = (lobbyId: string) => {
+    setActiveLobbyId(lobbyId);
+    setSelectedLobbyId(lobbyId);
+  };
+
   const currentLobby =
-    lobbies.find((l) => l.id === (params.lobbyId || selectedLobbyId)) ||
-    selectedLobby;
+    lobbies.find((l) => l.id === activeLobbyId) ||
+    lobbies.find((l) => l.id === selectedLobbyId) ||
+    selectedLobby ||
+    lobbies[0];
 
   const handleToggleDoor = async (value: boolean) => {
     try {
@@ -112,8 +126,8 @@ export default function MonitorScreen() {
                 <TouchableOpacity
                   key={st.id}
                   style={[styles.lobbyChip, isSelected && styles.lobbyChipActive]}
-                  onPress={() => setSelectedLobbyId(st.id)}
-                  activeOpacity={0.8}
+                  onPress={() => handleSelectLobby(st.id)}
+                  activeOpacity={0.7}
                 >
                   <Ionicons
                     name="business-outline"
@@ -265,9 +279,7 @@ export default function MonitorScreen() {
 
         <View style={styles.card}>
           {binEntries.map((sensor, idx) => {
-            const pct = Math.min(Math.max(Number(sensor.fill_percent) || 0, 0), 100);
             const dist = Math.round(Number(sensor.distance_cm) || 0);
-            const isFull = pct >= stThreshold;
 
             return (
               <View
@@ -310,30 +322,6 @@ export default function MonitorScreen() {
                         Khoảng cách: {dist > 0 ? `${dist} cm` : '0 cm'}
                       </Text>
                     </View>
-                    <View style={styles.sensorMetric}>
-                      <Ionicons name="speedometer-outline" size={13} color={isFull ? '#d32f2f' : sensor.color} />
-                      <Text
-                        style={[
-                          styles.sensorMetricText,
-                          { color: isFull ? '#d32f2f' : '#333', fontWeight: isFull ? 'bold' : 'normal' },
-                        ]}
-                      >
-                        Mức đầy: {pct}% {isFull ? '(Vượt ngưỡng)' : ''}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Progress bar */}
-                  <View style={styles.miniBarBg}>
-                    <View
-                      style={[
-                        styles.miniBarFill,
-                        {
-                          width: `${pct}%`,
-                          backgroundColor: isFull ? '#d32f2f' : sensor.color,
-                        },
-                      ]}
-                    />
                   </View>
                 </View>
               </View>
@@ -544,3 +532,4 @@ const styles = StyleSheet.create({
   miniBarBg: { height: 6, backgroundColor: '#f0f0f0', borderRadius: 3, overflow: 'hidden' },
   miniBarFill: { height: '100%', borderRadius: 3 },
 });
+
