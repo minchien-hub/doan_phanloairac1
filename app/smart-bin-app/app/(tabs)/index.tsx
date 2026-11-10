@@ -225,7 +225,7 @@ export default function HomeScreen() {
               style={[styles.lobbyCard, statusInfo.isFull && styles.lobbyCardAlert]}
               onPress={() => {
                 setSelectedLobbyId(st.id);
-                router.push('/(tabs)/statistics');
+                router.push({ pathname: '/monitor', params: { lobbyId: st.id } });
               }}
             >
               {/* Card Header */}

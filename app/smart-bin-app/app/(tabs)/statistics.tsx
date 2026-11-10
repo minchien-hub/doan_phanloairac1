@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { ComponentProps } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ComponentProps, useEffect } from 'react';
 import {
   Alert,
   ScrollView,
@@ -30,6 +30,7 @@ const BIN_META: Record<string, BinMetaItem> = {
 };
 
 export default function StatisticsScreen() {
+  const params = useLocalSearchParams<{ lobbyId?: string }>();
   const {
     lobbies,
     selectedLobbyId,
@@ -39,15 +40,25 @@ export default function StatisticsScreen() {
     thresholdLimit,
   } = useSmartBin();
 
+  useEffect(() => {
+    if (params.lobbyId && params.lobbyId !== selectedLobbyId) {
+      setSelectedLobbyId(params.lobbyId);
+    }
+  }, [params.lobbyId]);
+
+  const currentLobby =
+    lobbies.find((l) => l.id === (params.lobbyId || selectedLobbyId)) ||
+    selectedLobby;
+
   const handleToggleDoor = async (value: boolean) => {
     try {
-      await toggleDoor(selectedLobby.id, value);
+      await toggleDoor(currentLobby.id, value);
     } catch (err: any) {
       Alert.alert('Lỗi', 'Không thể gửi lệnh điều khiển servo: ' + err.message);
     }
   };
 
-  const binEntries = Object.entries(selectedLobby.bins || {}).map(([key, data]) => {
+  const binEntries = Object.entries(currentLobby.bins || {}).map(([key, data]) => {
     const meta = BIN_META[key] || {
       name: key,
       color: '#4caf50',
@@ -74,7 +85,7 @@ export default function StatisticsScreen() {
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTitle}>Giám Sát Trạm IoT</Text>
-            <Text style={styles.headerSubtitle}>{selectedLobby.name}</Text>
+            <Text style={styles.headerSubtitle}>{currentLobby.name}</Text>
           </View>
         </View>
         <View style={styles.headerIconBox}>
@@ -92,7 +103,7 @@ export default function StatisticsScreen() {
             contentContainerStyle={styles.selectorScroll}
           >
             {lobbies.map((st) => {
-              const isSelected = st.id === selectedLobbyId;
+              const isSelected = st.id === currentLobby.id;
               return (
                 <TouchableOpacity
                   key={st.id}
@@ -117,21 +128,21 @@ export default function StatisticsScreen() {
         {/* ===== LOBBY INFO SUMMARY CARD ===== */}
         <View style={styles.lobbyInfoCard}>
           <View style={styles.lobbyInfoLeft}>
-            <Text style={styles.lobbyInfoName}>{selectedLobby.name}</Text>
+            <Text style={styles.lobbyInfoName}>{currentLobby.name}</Text>
             <Text style={styles.lobbyInfoLoc}>
-              <Ionicons name="location-outline" size={12} color="#666" /> {selectedLobby.location} (
-              {selectedLobby.building})
+              <Ionicons name="location-outline" size={12} color="#666" /> {currentLobby.location} (
+              {currentLobby.building})
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={styles.thresholdBadge}>
               <Ionicons name="speedometer-outline" size={11} color="#e65100" />
               <Text style={styles.thresholdBadgeText}>
-                Ngưỡng: {selectedLobby.threshold !== undefined ? selectedLobby.threshold : thresholdLimit}%
+                Ngưỡng: {currentLobby.threshold !== undefined ? currentLobby.threshold : thresholdLimit}%
               </Text>
             </View>
 
-            {selectedLobby.status === 'ONLINE' ? (
+            {currentLobby.status === 'ONLINE' ? (
               <View style={styles.lobbyStatusTagOn}>
                 <View style={styles.dotOn} />
                 <Text style={styles.lobbyStatusTextOn}>ON</Text>
@@ -160,9 +171,9 @@ export default function StatisticsScreen() {
           </View>
 
           <View style={styles.cameraBox}>
-            {selectedLobby.camera_url ? (
+            {currentLobby.camera_url ? (
               <WebView
-                source={{ uri: selectedLobby.camera_url }}
+                source={{ uri: currentLobby.camera_url }}
                 style={styles.webview}
                 scalesPageToFit={true}
                 scrollEnabled={false}
@@ -172,7 +183,7 @@ export default function StatisticsScreen() {
               <View style={styles.loadingCam}>
                 <Ionicons name="videocam-outline" size={38} color="#777" />
                 <Text style={styles.loadingText}>
-                  {selectedLobby.isHardwareSync
+                  {currentLobby.isHardwareSync
                     ? 'Đang chờ Raspberry Pi đồng bộ stream URL...'
                     : 'Chưa cấu hình camera cho trạm này'}
                 </Text>
@@ -180,8 +191,8 @@ export default function StatisticsScreen() {
             )}
           </View>
           <Text style={styles.cameraSubText}>
-            {selectedLobby.camera_url
-              ? `Đang phát luồng: ${selectedLobby.camera_url}`
+            {currentLobby.camera_url
+              ? `Đang phát luồng: ${currentLobby.camera_url}`
               : 'Trạng thái: Sẵn sàng kết nối qua giao thức RTSP/HTTP'}
           </Text>
         </View>
@@ -197,43 +208,43 @@ export default function StatisticsScreen() {
               <View
                 style={[
                   styles.servoIconBox,
-                  { backgroundColor: selectedLobby.is_door_open ? '#e8f5e9' : '#e3f2fd' },
+                  { backgroundColor: currentLobby.is_door_open ? '#e8f5e9' : '#e3f2fd' },
                 ]}
               >
                 <Ionicons
-                  name={selectedLobby.is_door_open ? 'lock-open-outline' : 'lock-closed-outline'}
+                  name={currentLobby.is_door_open ? 'lock-open-outline' : 'lock-closed-outline'}
                   size={22}
-                  color={selectedLobby.is_door_open ? '#1b5e20' : '#0288d1'}
+                  color={currentLobby.is_door_open ? '#1b5e20' : '#0288d1'}
                 />
               </View>
               <View>
-                <Text style={styles.servoTitle}>Cửa Thả Rác Sảnh ({selectedLobby.building})</Text>
+                <Text style={styles.servoTitle}>Cửa Thả Rác Sảnh ({currentLobby.building})</Text>
                 <View
                   style={[
                     styles.servoStatusBadge,
-                    { backgroundColor: selectedLobby.is_door_open ? '#e8f5e9' : '#fff3e0' },
+                    { backgroundColor: currentLobby.is_door_open ? '#e8f5e9' : '#fff3e0' },
                   ]}
                 >
                   <View
                     style={[
                       styles.servoStatusDot,
-                      { backgroundColor: selectedLobby.is_door_open ? '#1b5e20' : '#f57c00' },
+                      { backgroundColor: currentLobby.is_door_open ? '#1b5e20' : '#f57c00' },
                     ]}
                   />
                   <Text
                     style={[
                       styles.servoStatusText,
-                      { color: selectedLobby.is_door_open ? '#1b5e20' : '#f57c00' },
+                      { color: currentLobby.is_door_open ? '#1b5e20' : '#f57c00' },
                     ]}
                   >
-                    {selectedLobby.is_door_open ? 'Cửa Đang Mở' : 'Cửa Đang Đóng'}
+                    {currentLobby.is_door_open ? 'Cửa Đang Mở' : 'Cửa Đang Đóng'}
                   </Text>
                 </View>
               </View>
             </View>
 
             <Switch
-              value={!!selectedLobby.is_door_open}
+              value={!!currentLobby.is_door_open}
               onValueChange={handleToggleDoor}
               trackColor={{ false: '#ccc', true: '#81c784' }}
               thumbColor={selectedLobby.is_door_open ? '#1b5e20' : '#f4f3f4'}
@@ -287,6 +298,12 @@ export default function StatisticsScreen() {
                       <Ionicons name="resize-outline" size={13} color="#666" />
                       <Text style={styles.sensorMetricText}>
                         Khoảng cách: {Math.round(Number(sensor.distance_cm) || 0)} cm
+                      </Text>
+                    </View>
+                    <View style={styles.sensorMetric}>
+                      <Ionicons name="speedometer-outline" size={13} color="#666" />
+                      <Text style={styles.sensorMetricText}>
+                        Mức đầy: {Math.round(Number(sensor.fill_percent) || 0)}%
                       </Text>
                     </View>
                   </View>

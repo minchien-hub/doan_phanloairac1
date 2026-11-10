@@ -55,6 +55,9 @@ function RootLayoutNav() {
           {/* Nhóm các tab chức năng chính sau khi đăng nhập */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           
+          {/* Màn hình Giám Sát Chi Tiết Trạm IoT */}
+          <Stack.Screen name="monitor" options={{ headerShown: false }} />
+          
           {/* Modal hệ thống nếu có */}
           <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
