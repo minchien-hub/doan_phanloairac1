@@ -67,14 +67,11 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Tab 2: Giám sát IoT / Camera & Servo */}
+      {/* Tab 2: Giám sát IoT (Đã gộp vào Bảng Điều Khiển khi bấm vào từng thẻ trạm) */}
       <Tabs.Screen
         name="statistics"
         options={{
-          title: 'Giám Sát IoT',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={focused ? 'hardware-chip' : 'hardware-chip-outline'} color={color} focused={focused} />
-          ),
+          href: null,
         }}
       />
 

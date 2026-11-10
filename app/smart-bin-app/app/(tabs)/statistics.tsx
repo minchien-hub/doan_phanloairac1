@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { ComponentProps } from 'react';
 import {
   Alert,
@@ -63,8 +64,18 @@ export default function StatisticsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* ===== HEADER ===== */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Giám Sát Trạm IoT</Text>
+        <View style={styles.headerLeftRow}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>Giám Sát Trạm IoT</Text>
+            <Text style={styles.headerSubtitle}>{selectedLobby.name}</Text>
+          </View>
         </View>
         <View style={styles.headerIconBox}>
           <Ionicons name="hardware-chip-outline" size={22} color="#fff" />
@@ -303,6 +314,15 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   headerSubtitle: { fontSize: 11, color: '#c8e6c9', marginTop: 2 },
+  headerLeftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   headerIconBox: {
     width: 36,
     height: 36,

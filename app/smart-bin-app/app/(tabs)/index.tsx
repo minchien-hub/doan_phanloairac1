@@ -18,6 +18,7 @@ export default function HomeScreen() {
     thresholdLimit,
     hasWarning,
     notifyEnabled,
+    setSelectedLobbyId,
   } = useSmartBin();
 
   const [selectedBuilding, setSelectedBuilding] = useState<string>('ALL');
@@ -218,12 +219,21 @@ export default function HomeScreen() {
           ];
 
           return (
-            <View key={st.id} style={[styles.lobbyCard, statusInfo.isFull && styles.lobbyCardAlert]}>
+            <TouchableOpacity
+              key={st.id}
+              activeOpacity={0.8}
+              style={[styles.lobbyCard, statusInfo.isFull && styles.lobbyCardAlert]}
+              onPress={() => {
+                setSelectedLobbyId(st.id);
+                router.push('/(tabs)/statistics');
+              }}
+            >
               {/* Card Header */}
               <View style={styles.lobbyHeader}>
                 <View style={{ flex: 1 }}>
                   <View style={styles.lobbyTitleRow}>
                     <Text style={styles.lobbyName}>{st.name}</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#888" />
                   </View>
                   <Text style={styles.lobbyLocation}>
                     <Ionicons
@@ -285,7 +295,7 @@ export default function HomeScreen() {
                   );
                 })}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
 
