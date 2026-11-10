@@ -42,10 +42,10 @@ const long STEPS_PER_REV = MOTOR_STEPS * MICROSTEPS;
 #define MOTOR_SETTLE_MS 200
 
 // GOC QUAY CAC NGAN
-#define ANGLE_ORGANIC       45
-#define ANGLE_RECYCLE      135
-#define ANGLE_NONRECYCLE  -135
-#define ANGLE_HAZARDOUS    -45
+#define ANGLE_ORGANIC      45
+#define ANGLE_RECYCLE     135
+#define ANGLE_NONRECYCLE -135
+#define ANGLE_HAZARDOUS   -45
 
 // =====================================================
 // 3. SERVO 1 - DONG / MO CUA
@@ -83,8 +83,11 @@ const char* binNames[SENSOR_COUNT] = {
   "NGUY HAI"
 };
 
-#define EMPTY_DISTANCE_CM 55.0f
-#define FULL_DISTANCE_CM  10.0f
+// Cấu hình lại theo kích thước thực tế mới:
+// - Chiều cao từ cảm biến đến đáy thùng (thùng trống): 50cm
+// - Chiều sâu thùng rác thực tế (khoảng chứa rác tối đa): 35cm -> Khi đầy, khoảng cách còn lại là 50 - 35 = 15cm
+#define EMPTY_DISTANCE_CM 50.0f
+#define FULL_DISTANCE_CM  15.0f
 
 #define WARNING_LEVEL 80
 #define FULL_LEVEL 95
@@ -198,6 +201,9 @@ void updateFirebaseData(int index, int percent, float dist, String status, bool 
     Firebase.setFloat(fbdo, path + "/distance_cm", dist);
     Firebase.setString(fbdo, path + "/status", status);
     Firebase.setBool(fbdo, path + "/sensor_ok", sensorOk);
+
+    // Đồng bộ trạng thái trạm đang hoạt động
+    Firebase.setString(fbdo, "/smart_bin/status", "ONLINE");
   }
 }
 
@@ -390,6 +396,8 @@ void setup() {
   config.signer.test_mode = true;
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+  Firebase.setString(fbdo, "/smart_bin/status", "ONLINE");
+  Firebase.setString(fbdo, "/smart_bin/lobbies/lobby_a/status", "ONLINE");
 
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);

@@ -194,11 +194,14 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     const unsubBins = onValue(binsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
+        // Có dữ liệu từ cảm biến thực tế => Trạm phần cứng đang hoạt động ONLINE
+        const hasSensors = !!(data && Object.keys(data).length > 0);
         setLobbies((prev) =>
           prev.map((lb) => {
             if (lb.isHardwareSync) {
               return {
                 ...lb,
+                status: hasSensors ? 'ONLINE' : lb.status,
                 bins: {
                   organic: data.organic || lb.bins.organic,
                   recycle: data.recycle || lb.bins.recycle,
@@ -216,23 +219,19 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     const unsubCamera = onValue(cameraRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        let isHwActive = false;
-        if (data.updated_at) {
-          const lastTime = new Date(data.updated_at).getTime();
-          isHwActive = !isNaN(lastTime) && Date.now() - lastTime < 5 * 60 * 1000;
+        if (data.stream_url) {
+          setLobbies((prev) =>
+            prev.map((lb) => {
+              if (lb.isHardwareSync) {
+                return {
+                  ...lb,
+                  camera_url: data.stream_url,
+                };
+              }
+              return lb;
+            })
+          );
         }
-        setLobbies((prev) =>
-          prev.map((lb) => {
-            if (lb.isHardwareSync) {
-              return {
-                ...lb,
-                camera_url: data.stream_url || lb.camera_url,
-                status: isHwActive ? 'ONLINE' : 'OFFLINE',
-              };
-            }
-            return lb;
-          })
-        );
       }
     });
 
@@ -312,9 +311,10 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
           return firebaseList.map((st) => {
             if (st.isHardwareSync) {
               const prevHw = prev.find((p) => p.isHardwareSync);
+              const isHwOnline = (prevHw && prevHw.status === 'ONLINE') || st.status === 'ONLINE';
               return {
                 ...st,
-                status: prevHw ? prevHw.status : 'OFFLINE',
+                status: isHwOnline ? 'ONLINE' : 'OFFLINE',
                 camera_url: prevHw?.camera_url || st.camera_url,
                 is_door_open:
                   prevHw?.is_door_open !== undefined ? prevHw.is_door_open : st.is_door_open,
