@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   Alert,
   ScrollView,
@@ -21,25 +21,9 @@ export default function HomeScreen() {
     setSelectedLobbyId,
   } = useSmartBin();
 
-  const [selectedBuilding, setSelectedBuilding] = useState<string>('ALL');
   const alertedStationsRef = useRef<Set<string>>(new Set());
 
-  // Danh sách các tòa để lọc
-  const buildings = useMemo(() => {
-    const setB = new Set<string>();
-    lobbies.forEach((s) => {
-      if (s.building) setB.add(s.building);
-    });
-    return ['ALL', ...Array.from(setB)];
-  }, [lobbies]);
-
-  // Lọc theo tòa
-  const filteredLobbies = useMemo(() => {
-    if (selectedBuilding === 'ALL') return lobbies;
-    return lobbies.filter((s) => s.building === selectedBuilding);
-  }, [lobbies, selectedBuilding]);
-
-  // Thống kê trạm đầy hoặc nguy cơ (chỉ tính trạm có kết nối phần cứng thực tế và có mức rác thật)
+  // Thống kê điểm tập kết đầy hoặc có nguy cơ
   const fullLobbies = lobbies.filter((st) => {
     if (!st.isHardwareSync) return false;
     const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
@@ -51,7 +35,7 @@ export default function HomeScreen() {
     return st.bins && Object.values(st.bins).some((b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0);
   });
 
-  // Hiển thị thông báo popup khi có trạm vượt ngưỡng (nếu cài đặt bật)
+  // Hiển thị thông báo popup khi có điểm tập kết vượt ngưỡng (nếu cài đặt bật)
   useEffect(() => {
     if (!notifyEnabled) return;
 
@@ -64,11 +48,11 @@ export default function HomeScreen() {
       const names = unalertedFullLobbies.map((s) => `${s.name} (${s.building})`).join('\n• ');
       Alert.alert(
         'Cảnh Báo Rác Đầy! ⚠️',
-        `Phát hiện trạm rác đã đạt hoặc vượt ngưỡng cảnh báo:\n\n• ${names}\n\nVui lòng nhanh chóng điều phối nhân viên thu gom rác.`
+        `Phát hiện điểm tập kết đã đạt hoặc vượt ngưỡng cảnh báo:\n\n• ${names}\n\nVui lòng nhanh chóng điều phối nhân viên thu gom rác.`
       );
     }
 
-    // Xóa khỏi danh sách đã cảnh báo nếu trạm đã được dọn sạch
+    // Xóa khỏi danh sách đã cảnh báo nếu điểm tập kết đã được dọn sạch
     const currentFullIds = new Set(fullLobbies.map((s) => s.id));
     alertedStationsRef.current.forEach((id) => {
       if (!currentFullIds.has(id)) {
@@ -123,34 +107,23 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ===== STATS ROW ===== */}
+        {/* ===== STATS ROW (2 CARDS) ===== */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { borderTopColor: '#1b5e20' }]}>
-            <Text style={styles.statNumber}>{lobbies.length}</Text>
-            <Text style={styles.statLabel}>Tổng sảnh</Text>
+          <View style={[styles.statCard, styles.statCardGreenBorder]}>
+            <Text style={styles.statNumberGreen}>{lobbies.length}</Text>
+            <Text style={styles.statLabel}>Điểm tập kết</Text>
           </View>
-          <View
-            style={[
-              styles.statCard,
-              { borderTopColor: atRiskLobbies.length > 0 ? '#f57c00' : '#1b5e20' },
-            ]}
-          >
+
+          <View style={styles.statCard}>
             <Text
               style={[
                 styles.statNumber,
-                { color: atRiskLobbies.length > 0 ? '#f57c00' : '#1b5e20' },
+                atRiskLobbies.length > 0 && { color: '#f57c00' },
               ]}
             >
               {atRiskLobbies.length}
             </Text>
             <Text style={styles.statLabel}>Cần dọn rác</Text>
-          </View>
-          <View style={[styles.statCard, { borderTopColor: '#0288d1' }]}>
-            <View style={styles.onlinePill}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlinePillText}>Đồng bộ</Text>
-            </View>
-            <Text style={styles.statLabel}>Hệ thống IoT</Text>
           </View>
         </View>
 
@@ -159,52 +132,29 @@ export default function HomeScreen() {
           <View style={[styles.alertBanner, styles.alertBannerWarn]}>
             <Ionicons name="warning" size={18} color="#d32f2f" />
             <Text style={[styles.alertBannerText, { color: '#d32f2f' }]}>
-              Có {fullLobbies.length} sảnh đạt ngưỡng đầy ({thresholdLimit}%). Cần điều phối thu gom ngay!
+              Có {fullLobbies.length} điểm tập kết đạt ngưỡng đầy ({thresholdLimit}%). Cần điều phối thu gom ngay!
             </Text>
           </View>
         ) : (
           <View style={[styles.alertBanner, styles.alertBannerOk]}>
             <Ionicons name="checkmark-circle" size={18} color="#2e7d32" />
             <Text style={[styles.alertBannerText, { color: '#2e7d32' }]}>
-              Tất cả các trạm sảnh đều trong ngưỡng an toàn
+              Tất cả điểm tập kết đang trong ngưỡng an toàn
             </Text>
           </View>
         )}
 
-        {/* ===== BUILDING FILTER CHIPS ===== */}
-        <View style={styles.filterSection}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
-            {buildings.map((b) => {
-              const isActive = selectedBuilding === b;
-              return (
-                <TouchableOpacity
-                  key={b}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
-                  onPress={() => setSelectedBuilding(b)}
-                >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                    {b === 'ALL' ? 'Tất cả tòa' : b}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* ===== LOBBY CARDS LIST ===== */}
+        {/* ===== SECTION HEADER ROW ===== */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Danh Sách Sảnh Rác</Text>
+          <Text style={styles.sectionTitle}>Các điểm tập kết</Text>
           <View style={styles.liveBadge}>
             <View style={styles.liveDot} />
-            <Text style={styles.liveText}>Thời gian thực</Text>
+            <Text style={styles.liveText}>Đang đồng bộ</Text>
           </View>
         </View>
 
-        {filteredLobbies.map((st) => {
+        {/* ===== COLLECTION POINTS CARDS LIST ===== */}
+        {lobbies.map((st) => {
           const statusInfo = getLobbyOverallStatus(st);
           const organicData = st.bins?.organic || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
           const recycleData = st.bins?.recycle || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
@@ -230,27 +180,15 @@ export default function HomeScreen() {
             >
               {/* Card Header */}
               <View style={styles.lobbyHeader}>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.lobbyTitleRow}>
-                    <Text style={styles.lobbyName}>{st.name}</Text>
-                    <Ionicons name="chevron-forward" size={16} color="#888" />
-                  </View>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.lobbyName}>{st.name}</Text>
                   <Text style={styles.lobbyLocation}>
                     <Ionicons
                       name="location-outline"
                       size={12}
-                      color={statusInfo.isFull ? '#d32f2f' : '#888'}
+                      color={statusInfo.isFull ? '#d32f2f' : '#666'}
                     />{' '}
-                    {st.location} (
-                    <Text
-                      style={[
-                        styles.buildingText,
-                        statusInfo.isFull && styles.buildingTextRed,
-                      ]}
-                    >
-                      {st.building}
-                    </Text>
-                    )
+                    {st.location} ({st.building})
                   </Text>
                 </View>
 
@@ -295,6 +233,23 @@ export default function HomeScreen() {
                   );
                 })}
               </View>
+
+              {/* Cảnh báo thiết bị ngoại tuyến (chỉ hiển thị nếu trạm OFFLINE) */}
+              {st.status === 'OFFLINE' && (
+                <View style={styles.offlineNoticeBox}>
+                  <Text style={styles.offlineNoticeText}>
+                    Thiết bị ngoại tuyến · số liệu chưa được xác nhận
+                  </Text>
+                </View>
+              )}
+
+              {/* Card Footer: Lần thu gom gần nhất */}
+              <View style={styles.lobbyFooter}>
+                <Ionicons name="time-outline" size={13} color="#888" style={{ marginRight: 4 }} />
+                <Text style={styles.lastCleanText}>
+                  Thu gom: {st.lastCleaned || 'Hôm nay, 15:25'}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -326,7 +281,6 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  headerSubtitle: { fontSize: 11, color: '#c8e6c9', marginTop: 2 },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   notifBtn: {
     width: 36,
@@ -349,30 +303,31 @@ const styles = StyleSheet.create({
   },
   scrollContent: { padding: 16, paddingBottom: 24 },
 
-  // Stats
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  // Stats (2 cards)
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   statCard: {
     flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    borderTopWidth: 3,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e8ece8',
     elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-  statNumber: { fontSize: 20, fontWeight: 'bold', color: '#1b5e20' },
-  statLabel: { fontSize: 10, color: '#888', marginTop: 2 },
-  onlinePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 24,
-    backgroundColor: '#e1f5fe',
-    paddingHorizontal: 6,
-    borderRadius: 12,
-    gap: 4,
+  statCardGreenBorder: {
+    borderColor: '#a5d6a7',
+    borderWidth: 1.5,
   },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#0288d1' },
-  onlinePillText: { fontSize: 10, fontWeight: 'bold', color: '#0288d1' },
+  statNumberGreen: { fontSize: 24, fontWeight: 'bold', color: '#1b5e20' },
+  statNumber: { fontSize: 24, fontWeight: 'bold', color: '#1b5e20' },
+  statLabel: { fontSize: 11, color: '#666', marginTop: 4, fontWeight: '500' },
 
   // Alert Banner
   alertBanner: {
@@ -388,42 +343,32 @@ const styles = StyleSheet.create({
   alertBannerWarn: { backgroundColor: '#ffebee' },
   alertBannerText: { fontSize: 12, fontWeight: '600', flex: 1 },
 
-  // Filter
-  filterSection: { marginBottom: 12 },
-  filterScroll: { gap: 8 },
-  filterChip: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  filterChipActive: { backgroundColor: '#1b5e20', borderColor: '#1b5e20' },
-  filterChipText: { fontSize: 12, color: '#555', fontWeight: '500' },
-  filterChipTextActive: { color: '#fff', fontWeight: 'bold' },
-
   // Section Header
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginTop: 4,
+    marginBottom: 12,
   },
-  sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#1b5e20' },
-  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1b5e20' },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4caf50' },
-  liveText: { fontSize: 11, color: '#4caf50', fontWeight: 'bold' },
+  liveText: { fontSize: 12, color: '#2e7d32', fontWeight: '600' },
 
-  // Lobby Cards
+  // Collection Point Cards
   lobbyCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 14,
     elevation: 2,
     borderLeftWidth: 4,
     borderLeftColor: '#1b5e20',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
   lobbyCardAlert: {
     borderLeftColor: '#d32f2f',
@@ -433,30 +378,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  lobbyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   lobbyName: { fontSize: 15, fontWeight: 'bold', color: '#222' },
-  hardwareBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e1f5fe',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    gap: 2,
-  },
-  hardwareText: { fontSize: 9, fontWeight: 'bold', color: '#0288d1' },
-  lobbyLocation: { fontSize: 11, color: '#777', marginTop: 3 },
-  buildingText: { color: '#777' },
-  buildingTextRed: { color: '#d32f2f', fontWeight: 'bold', fontSize: 12 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  lobbyLocation: { fontSize: 11, color: '#666', marginTop: 3 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
   statusBadgeText: { fontSize: 10, fontWeight: 'bold' },
 
   // Bins Grid
   binsGrid: {
     flexDirection: 'row',
-    backgroundColor: '#fbfbfb',
+    backgroundColor: '#fafafa',
     borderRadius: 10,
     padding: 10,
     gap: 8,
@@ -465,6 +397,29 @@ const styles = StyleSheet.create({
   binColHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   binColName: { fontSize: 10, color: '#666', fontWeight: '600' },
   binColPct: { fontSize: 10, fontWeight: 'bold' },
-  miniBarBg: { height: 6, backgroundColor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' },
-  miniBarFill: { height: '100%', borderRadius: 3 },
+  miniBarBg: { height: 5, backgroundColor: '#e0e0e0', borderRadius: 2.5, overflow: 'hidden' },
+  miniBarFill: { height: '100%', borderRadius: 2.5 },
+
+  // Offline Notice Box
+  offlineNoticeBox: {
+    backgroundColor: '#fff8e1',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  offlineNoticeText: {
+    fontSize: 11,
+    color: '#b78103',
+    fontWeight: '500',
+  },
+
+  // Footer
+  lobbyFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  lastCleanText: { fontSize: 11, color: '#777' },
 });
