@@ -45,10 +45,10 @@ export default function MonitorScreen() {
     params.lobbyId || selectedLobbyId || 'lobby_a'
   );
 
-  // Accordion toggle states (mặc định mở Camera và Điều khiển theo hình mẫu của người dùng)
-  const [isCameraExpanded, setIsCameraExpanded] = useState<boolean>(true);
-  const [isDoorExpanded, setIsDoorExpanded] = useState<boolean>(true);
-  const [isSensorExpanded, setIsSensorExpanded] = useState<boolean>(true);
+  // Accordion toggle states (mặc định rút gọn tất cả các mục khi bấm vào trạm)
+  const [isCameraExpanded, setIsCameraExpanded] = useState<boolean>(false);
+  const [isDoorExpanded, setIsDoorExpanded] = useState<boolean>(false);
+  const [isSensorExpanded, setIsSensorExpanded] = useState<boolean>(false);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState<boolean>(false);
 
   // Lịch sử thu gom từ Firebase
