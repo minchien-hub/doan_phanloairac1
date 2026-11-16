@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { set, ref } from 'firebase/database';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,30 +13,47 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../../config/firebaseConfig';
 import { Lobby, useSmartBin } from '../../constants/ApartmentContext';
 
 export default function HomeScreen() {
   const {
     lobbies,
     thresholdLimit,
+    setThresholdLimit,
+    updateLobbyThreshold,
     hasWarning,
     notifyEnabled,
     setSelectedLobbyId,
+    addLobby,
+    deleteLobby,
+    resetLobby,
+    configureWifi,
   } = useSmartBin();
 
-  const [selectedBuilding, setSelectedBuilding] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterOnlyNeedClean, setFilterOnlyNeedClean] = useState<boolean>(false);
   const alertedStationsRef = useRef<Set<string>>(new Set());
 
-  // Danh sách các tòa/khu vực tự động trích xuất từ lobbies
-  const buildings = useMemo(() => {
-    const setB = new Set<string>();
-    lobbies.forEach((s) => {
-      if (s.building) setB.add(s.building);
-    });
-    return ['ALL', ...Array.from(setB)];
-  }, [lobbies]);
+  // ===== MODAL QUẢN LÝ DANH SÁCH TRẠM RÁC =====
+  const [stationListModalVisible, setStationListModalVisible] = useState(false);
+
+  // ===== MODAL THÊM TRẠM RÁC MỚI =====
+  const [addLobbyModalVisible, setAddLobbyModalVisible] = useState(false);
+  const [newLobbyName, setNewLobbyName] = useState('');
+  const [newLobbyBuilding, setNewLobbyBuilding] = useState('Tòa A');
+  const [newLobbyLocation, setNewLobbyLocation] = useState('');
+
+  // ===== MODAL CẤU HÌNH WI-FI CHO TRẠM =====
+  const [deviceModalVisible, setDeviceModalVisible] = useState(false);
+  const [targetWifiLobbyId, setTargetWifiLobbyId] = useState<string>(lobbies[0]?.id || '');
+  const [wifiSsid, setWifiSsid] = useState('');
+  const [wifiPassword, setWifiPassword] = useState('');
+
+  // ===== MODAL CÀI ĐẶT NGƯỠNG CẢNH BÁO CHO TRẠM =====
+  const [thresholdModalVisible, setThresholdModalVisible] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState(String(thresholdLimit));
+  const [targetThresholdLobbyId, setTargetThresholdLobbyId] = useState<string>('');
+  const targetThresholdLobby = lobbies.find((l) => l.id === targetThresholdLobbyId) || lobbies[0];
 
   // Thống kê điểm tập kết đầy hoặc có nguy cơ
   const fullLobbies = lobbies.filter((st) => {
@@ -48,11 +67,11 @@ export default function HomeScreen() {
     return st.bins && Object.values(st.bins).some((b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0);
   });
 
-  // Lọc và sắp xếp danh sách điểm tập kết (Hỗ trợ khi số lượng điểm nhiều)
+  // Lọc và sắp xếp danh sách điểm tập kết
   const filteredLobbies = useMemo(() => {
     let list = lobbies;
 
-    // 1. Lọc theo trạng thái "Cần dọn rác" nếu người dùng bấm vào thẻ thống kê
+    // Lọc theo trạng thái "Cần dọn rác" nếu người dùng bấm vào thẻ thống kê
     if (filterOnlyNeedClean) {
       list = list.filter((st) => {
         const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
@@ -65,23 +84,7 @@ export default function HomeScreen() {
       });
     }
 
-    // 2. Lọc theo tòa / khu vực được chọn từ hàng Chip
-    if (selectedBuilding !== 'ALL') {
-      list = list.filter((s) => s.building === selectedBuilding);
-    }
-
-    // 3. Lọc theo từ khóa tìm kiếm (tên điểm, địa chỉ, tòa nhà)
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.location.toLowerCase().includes(q) ||
-          (s.building && s.building.toLowerCase().includes(q))
-      );
-    }
-
-    // 4. Sắp xếp thông minh: Điểm có mức rác đầy nhất tự động nổi lên đầu
+    // Sắp xếp: Điểm có mức rác đầy nhất tự động nổi lên đầu
     return [...list].sort((a, b) => {
       const maxA = a.bins
         ? Math.max(...Object.values(a.bins).map((x) => x.fill_percent || 0), 0)
@@ -91,7 +94,7 @@ export default function HomeScreen() {
         : 0;
       return maxB - maxA;
     });
-  }, [lobbies, selectedBuilding, searchQuery, filterOnlyNeedClean, thresholdLimit]);
+  }, [lobbies, filterOnlyNeedClean, thresholdLimit]);
 
   // Hiển thị thông báo popup khi có điểm tập kết vượt ngưỡng (nếu cài đặt bật)
   useEffect(() => {
@@ -119,6 +122,7 @@ export default function HomeScreen() {
     });
   }, [fullLobbies, notifyEnabled, thresholdLimit]);
 
+  // Trạng thái tổng quan của trạm
   const getLobbyOverallStatus = (st: Lobby) => {
     if (!st.bins || Object.keys(st.bins).length === 0) {
       return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
@@ -134,6 +138,159 @@ export default function HomeScreen() {
       return { text: 'Sắp đầy', color: '#f57c00', bg: '#fff3e0', isFull: false };
     }
     return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
+  };
+
+  // ===== CÁC HÀM XỬ LÝ TRẠM RÁC =====
+  const handleResetStation = (st: Lobby) => {
+    Alert.alert(
+      'Xác nhận đặt lại (Reset) trạm rác',
+      `Bạn có chắc muốn đặt lại dữ liệu cảm biến của "${st.name}" về 0% và ổn định trạng thái bình thường?`,
+      [
+        { text: 'Hủy bỏ', style: 'cancel' },
+        {
+          text: 'Xác nhận Reset',
+          style: 'default',
+          onPress: async () => {
+            try {
+              await resetLobby(st.id);
+              Alert.alert('Thành công', `Đã đặt lại (reset) dữ liệu trạm rác "${st.name}".`);
+            } catch (err: any) {
+              Alert.alert('Lỗi', 'Không thể reset trạm rác: ' + err.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteStation = (st: Lobby) => {
+    if (lobbies.length <= 1) {
+      Alert.alert('Thông báo', 'Không thể xóa trạm rác cuối cùng trong hệ thống!');
+      return;
+    }
+
+    Alert.alert(
+      'Xác nhận xóa trạm rác',
+      `Bạn có chắc chắn muốn xóa vĩnh viễn trạm rác "${st.name}" (${st.building}) khỏi hệ thống không?\n\nThao tác này không thể hoàn tác.`,
+      [
+        { text: 'Hủy bỏ', style: 'cancel' },
+        {
+          text: 'Xác nhận xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLobby(st.id);
+              Alert.alert('Đã xóa', `Đã xóa trạm rác "${st.name}" khỏi hệ thống.`);
+            } catch (err: any) {
+              Alert.alert('Lỗi', 'Không thể xóa trạm: ' + err.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveWifi = async () => {
+    if (!wifiSsid.trim() || !wifiPassword.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ tên Wi-Fi và mật khẩu!');
+      return;
+    }
+
+    try {
+      const targetId = targetWifiLobbyId || lobbies[0]?.id;
+      await configureWifi(targetId, wifiSsid.trim(), wifiPassword.trim());
+
+      const targetSt = lobbies.find((l) => l.id === targetId);
+      Alert.alert(
+        'Thành công',
+        `Đã lưu cấu hình Wi-Fi (${wifiSsid}) cho trạm rác "${targetSt?.name || 'IoT'}"!`
+      );
+      setWifiSsid('');
+      setWifiPassword('');
+      setDeviceModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Lỗi', 'Không thể gửi cấu hình Wi-Fi: ' + err.message);
+    }
+  };
+
+  const executeSaveThreshold = async (parsed: number) => {
+    try {
+      if (targetThresholdLobbyId) {
+        await updateLobbyThreshold(targetThresholdLobbyId, parsed);
+        const targetSt = lobbies.find((l) => l.id === targetThresholdLobbyId);
+        setThresholdModalVisible(false);
+        Alert.alert('Thành công', `Đã cập nhật ngưỡng cảnh báo của "${targetSt?.name || 'trạm'}" thành ${parsed}%!`);
+      } else {
+        const settingsRef = ref(db, 'smart_bin/settings/threshold');
+        await set(settingsRef, parsed);
+        setThresholdLimit(parsed);
+        setThresholdModalVisible(false);
+        Alert.alert('Thành công', `Đã cập nhật ngưỡng cảnh báo rác đầy thành ${parsed}%!`);
+      }
+    } catch (error: any) {
+      Alert.alert('Lỗi', 'Không thể lưu cài đặt: ' + error.message);
+    }
+  };
+
+  const handleSaveSettings = () => {
+    const parsed = parseInt(thresholdInput, 10);
+    if (isNaN(parsed) || parsed < 30 || parsed > 99) {
+      Alert.alert('Ngưỡng không hợp lệ', 'Ngưỡng cảnh báo phải nằm trong khoảng từ 30% đến 99% để đảm bảo vận hành hợp lý!');
+      return;
+    }
+
+    if (parsed !== 80) {
+      const isHigher = parsed > 80;
+      Alert.alert(
+        'Xác nhận điều chỉnh ngưỡng cảnh báo',
+        `Ngưỡng mặc định chuẩn là 80%.\n\nBạn đang ${isHigher ? 'TĂNG' : 'GIẢM'} ngưỡng lên ${parsed}% (${isHigher ? 'rác sẽ chứa nhiều hơn trước khi báo động' : 'sẽ gửi cảnh báo sớm hơn bình thường'}).\n\nBạn có chắc chắn muốn áp dụng thay đổi này không?`,
+        [
+          { text: 'Hủy bỏ', style: 'cancel' },
+          {
+            text: 'Đồng ý thay đổi',
+            style: isHigher ? 'destructive' : 'default',
+            onPress: () => executeSaveThreshold(parsed),
+          },
+        ]
+      );
+    } else {
+      executeSaveThreshold(80);
+    }
+  };
+
+  const handleResetDefaultThreshold = () => {
+    setThresholdInput('80');
+    executeSaveThreshold(80);
+  };
+
+  const handleCreateLobby = async () => {
+    if (!newLobbyName.trim() || !newLobbyLocation.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ tên trạm rác và vị trí!');
+      return;
+    }
+
+    try {
+      await addLobby({
+        name: newLobbyName.trim(),
+        building: newLobbyBuilding.trim(),
+        location: newLobbyLocation.trim(),
+        status: 'ONLINE',
+        lastCleaned: 'Hôm nay',
+        bins: {
+          organic: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
+          recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
+          non_recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
+          hazardous: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
+        },
+      });
+
+      Alert.alert('Thành công', `Đã thêm trạm rác "${newLobbyName}" vào hệ thống thu gom!`);
+      setNewLobbyName('');
+      setNewLobbyLocation('');
+      setAddLobbyModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Lỗi', 'Không thể thêm trạm rác: ' + err.message);
+    }
   };
 
   return (
@@ -165,14 +322,14 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ===== STATS ROW (2 CARDS BẤM ĐƯỢC ĐỂ LỌC NHANH) ===== */}
+        {/* ===== STATS ROW (BẤM VÀO ĐIỂM TẬP KẾT ĐỂ MỞ MODAL QUẢN LÝ TRẠM) ===== */}
         <View style={styles.statsRow}>
           <TouchableOpacity
             style={[
               styles.statCard,
-              !filterOnlyNeedClean && styles.statCardGreenBorder,
+              stationListModalVisible && styles.statCardGreenBorder,
             ]}
-            onPress={() => setFilterOnlyNeedClean(false)}
+            onPress={() => setStationListModalVisible(true)}
             activeOpacity={0.8}
           >
             <Text style={styles.statNumberGreen}>{lobbies.length}</Text>
@@ -218,53 +375,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ===== THANH TÌM KIẾM NHANH (GIẢI QUYẾT KHI SỐ LƯỢNG ĐIỂM NHIỀU) ===== */}
-        <View style={styles.searchSection}>
-          <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={16} color="#777" style={{ marginRight: 6 }} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm kiếm điểm tập kết, vị trí..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery('')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="close-circle" size={16} color="#888" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* ===== HÀNG CHIP LỌC THEO TÒA / KHU VỰC ===== */}
-        <View style={styles.filterSection}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
-            {buildings.map((b) => {
-              const isActive = selectedBuilding === b;
-              return (
-                <TouchableOpacity
-                  key={b}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
-                  onPress={() => setSelectedBuilding(b)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                    {b === 'ALL' ? 'Tất cả tòa' : b}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
         {/* ===== SECTION HEADER ROW ===== */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Các điểm tập kết</Text>
@@ -277,22 +387,20 @@ export default function HomeScreen() {
         {/* ===== DANH SÁCH ĐIỂM TẬP KẾT HOẶC TRẠNG THÁI TRỐNG ===== */}
         {filteredLobbies.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="search-outline" size={40} color="#bbb" />
-            <Text style={styles.emptyTitle}>Không tìm thấy điểm tập kết phù hợp</Text>
+            <Ionicons name="checkmark-circle-outline" size={40} color="#2e7d32" />
+            <Text style={styles.emptyTitle}>Không có điểm tập kết cần dọn rác</Text>
             <Text style={styles.emptySub}>
-              Thử tìm kiếm với từ khóa khác hoặc đặt lại bộ lọc tòa nhà
+              Tất cả các điểm tập kết đều đang ở mức an toàn.
             </Text>
-            <TouchableOpacity
-              style={styles.resetFilterBtn}
-              onPress={() => {
-                setSelectedBuilding('ALL');
-                setSearchQuery('');
-                setFilterOnlyNeedClean(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.resetFilterText}>Xem tất cả điểm tập kết</Text>
-            </TouchableOpacity>
+            {filterOnlyNeedClean && (
+              <TouchableOpacity
+                style={styles.resetFilterBtn}
+                onPress={() => setFilterOnlyNeedClean(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.resetFilterText}>Xem tất cả điểm tập kết</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           filteredLobbies.map((st) => {
@@ -388,7 +496,7 @@ export default function HomeScreen() {
                 <View style={styles.lobbyFooter}>
                   <Ionicons name="time-outline" size={13} color="#888" style={{ marginRight: 4 }} />
                   <Text style={styles.lastCleanText}>
-                    Thu gom: {st.lastCleaned || 'Hôm nay, 15:25'}
+                    Thu gom: {st.lastCleaned || 'Hôm nay, 13:00'}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -398,6 +506,297 @@ export default function HomeScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* ===== MODAL 1: DANH SÁCH TRẠM RÁC, XÓA & RESET (KHI BẤM THẺ ĐIỂM TẬP KẾT) ===== */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={stationListModalVisible}
+        onRequestClose={() => setStationListModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Danh Sách Trạm Rác</Text>
+                <Text style={styles.modalSubHeader}>
+                  Hiện có {lobbies.length} trạm rác trong hệ thống
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setStationListModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginVertical: 8 }}>
+              {lobbies.map((st) => {
+                return (
+                  <View key={st.id} style={styles.stationListItem}>
+                    <View style={styles.stationListTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.stationListName}>{st.name}</Text>
+                        <Text style={styles.stationListLoc}>
+                          <Ionicons name="location-outline" size={11} color="#777" /> {st.location} ({st.building})
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Actions row: Reset, Wifi, Ngưỡng, Xóa */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.stationItemActionsScroll}
+                      style={{ marginTop: 8 }}
+                    >
+                      <TouchableOpacity
+                        style={styles.actionBtnReset}
+                        onPress={() => handleResetStation(st)}
+                      >
+                        <Ionicons name="refresh-outline" size={13} color="#0288d1" />
+                        <Text style={styles.actionBtnResetText}>Reset trạm</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.actionBtnWifi}
+                        onPress={() => {
+                          setTargetWifiLobbyId(st.id);
+                          setStationListModalVisible(false);
+                          setDeviceModalVisible(true);
+                        }}
+                      >
+                        <Ionicons name="wifi-outline" size={13} color="#1b5e20" />
+                        <Text style={styles.actionBtnWifiText}>Wi-Fi</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.actionBtnThreshold}
+                        onPress={() => {
+                          setTargetThresholdLobbyId(st.id);
+                          setThresholdInput(String(st.threshold !== undefined ? st.threshold : thresholdLimit));
+                          setStationListModalVisible(false);
+                          setThresholdModalVisible(true);
+                        }}
+                      >
+                        <Ionicons name="speedometer-outline" size={13} color="#e65100" />
+                        <Text style={styles.actionBtnThresholdText}>
+                          Ngưỡng ({st.threshold !== undefined ? st.threshold : thresholdLimit}%)
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.actionBtnDelete}
+                        onPress={() => handleDeleteStation(st)}
+                      >
+                        <Ionicons name="trash-outline" size={13} color="#d32f2f" />
+                        <Text style={styles.actionBtnDeleteText}>Xóa trạm</Text>
+                      </TouchableOpacity>
+                    </ScrollView>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.primaryModalBtn}
+              onPress={() => {
+                setStationListModalVisible(false);
+                setAddLobbyModalVisible(true);
+              }}
+            >
+              <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.primaryModalBtnText}>Thêm Trạm Rác Mới</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== MODAL 2: THÊM TRẠM RÁC MỚI ===== */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={addLobbyModalVisible}
+        onRequestClose={() => setAddLobbyModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm Trạm Rác Mới</Text>
+              <TouchableOpacity onPress={() => setAddLobbyModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSub}>
+              Trạm rác sẽ được thêm vào hệ thống và theo dõi tự động cả 4 ngăn phân loại rác.
+            </Text>
+
+            <Text style={styles.inputLabel}>Tên trạm rác:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="VD: Trạm Rác Tòa D - Sakura"
+              placeholderTextColor="#999"
+              value={newLobbyName}
+              onChangeText={setNewLobbyName}
+            />
+
+            <Text style={styles.inputLabel}>Tòa nhà / Phân khu:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="VD: Tòa D hoặc Khối Thương Mại"
+              placeholderTextColor="#999"
+              value={newLobbyBuilding}
+              onChangeText={setNewLobbyBuilding}
+            />
+
+            <Text style={styles.inputLabel}>Vị trí cụ thể đặt trạm:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="VD: Tầng G - Cạnh thang máy số 2"
+              placeholderTextColor="#999"
+              value={newLobbyLocation}
+              onChangeText={setNewLobbyLocation}
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleCreateLobby}>
+              <Text style={styles.saveButtonText}>Thêm Trạm Rác</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== MODAL 3: CẤU HÌNH WI-FI CHO TRẠM RÁC ===== */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={deviceModalVisible}
+        onRequestClose={() => setDeviceModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Cấu Hình Wi-Fi Trạm Rác</Text>
+              <TouchableOpacity onPress={() => setDeviceModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSub}>
+              Đồng bộ kết nối mạng Internet cho trạm phần cứng IoT.
+            </Text>
+
+            <Text style={styles.inputLabel}>Chọn trạm rác áp dụng:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6, marginVertical: 6 }}
+            >
+              {lobbies.map((st) => {
+                const isSelected = st.id === targetWifiLobbyId;
+                return (
+                  <TouchableOpacity
+                    key={st.id}
+                    style={[styles.wifiSelectChip, isSelected && styles.wifiSelectChipActive]}
+                    onPress={() => setTargetWifiLobbyId(st.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.wifiSelectChipText,
+                        isSelected && styles.wifiSelectChipTextActive,
+                      ]}
+                    >
+                      {st.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.inputLabel}>Tên Wi-Fi (SSID):</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Nhập tên mạng Wi-Fi trạm..."
+              placeholderTextColor="#999"
+              value={wifiSsid}
+              onChangeText={setWifiSsid}
+              autoCapitalize="none"
+            />
+
+            <Text style={styles.inputLabel}>Mật khẩu:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Nhập mật khẩu Wi-Fi..."
+              placeholderTextColor="#999"
+              secureTextEntry
+              value={wifiPassword}
+              onChangeText={setWifiPassword}
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleSaveWifi}>
+              <Text style={styles.saveButtonText}>Lưu & Gửi Cấu Hình Wi-Fi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== MODAL 4: CẤU HÌNH NGƯỠNG CẢNH BÁO ĐẦY ===== */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={thresholdModalVisible}
+        onRequestClose={() => setThresholdModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Cài Đặt Ngưỡng Cảnh Báo</Text>
+                {targetThresholdLobby && (
+                  <Text style={styles.modalSubHeader}>
+                    {targetThresholdLobby.name} ({targetThresholdLobby.building})
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => setThresholdModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSub}>
+              Cài đặt ngưỡng cảnh báo độc lập cho trạm{' '}
+              <Text style={{ fontWeight: 'bold', color: '#1b5e20' }}>
+                {targetThresholdLobby?.name || 'này'}
+              </Text>. Khi bất kỳ ngăn rác nào tại trạm đạt ngưỡng này, hệ thống sẽ tự động kích hoạt cảnh báo nhắc nhân viên đi thu gom.
+            </Text>
+
+            <View style={styles.thresholdContainer}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.thresholdLabel}>Ngưỡng cảnh báo (%):</Text>
+                <Text style={styles.thresholdHelper}>Khuyến nghị chuẩn: 80%</Text>
+              </View>
+              <TextInput
+                style={styles.thresholdInput}
+                keyboardType="numeric"
+                value={thresholdInput}
+                onChangeText={setThresholdInput}
+                maxLength={3}
+                textAlignVertical="center"
+              />
+            </View>
+
+            {thresholdInput !== '80' && (
+              <TouchableOpacity
+                style={styles.resetDefaultBtn}
+                onPress={handleResetDefaultThreshold}
+              >
+                <Ionicons name="refresh-outline" size={14} color="#1b5e20" style={{ marginRight: 4 }} />
+                <Text style={styles.resetDefaultText}>Đặt lại về mức mặc định 80%</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleSaveSettings}>
+              <Text style={styles.saveButtonText}>Lưu & Áp Dụng Ngưỡng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -489,59 +888,6 @@ const styles = StyleSheet.create({
   alertBannerOk: { backgroundColor: '#e8f5e9' },
   alertBannerWarn: { backgroundColor: '#ffebee' },
   alertBannerText: { fontSize: 12, fontWeight: '600', flex: 1 },
-
-  // Search Section
-  searchSection: {
-    marginBottom: 10,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 38,
-    borderWidth: 1,
-    borderColor: '#e2e8e2',
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 12.5,
-    color: '#333',
-    paddingVertical: 0,
-  },
-
-  // Building Filter Chips
-  filterSection: {
-    marginBottom: 10,
-  },
-  filterScroll: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  filterChip: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterChipActive: {
-    backgroundColor: '#1b5e20',
-    borderColor: '#1b5e20',
-  },
-  filterChipText: {
-    fontSize: 12.5,
-    color: '#444',
-    fontWeight: '500',
-  },
-  filterChipTextActive: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
 
   // Section Header
   sectionHeaderRow: {
@@ -656,4 +1002,168 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1b5e20',
   },
+
+  // Station List in Modal
+  stationListItem: {
+    backgroundColor: '#fbfbfb',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+  },
+  stationListTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  stationListName: { fontSize: 14, fontWeight: 'bold', color: '#222' },
+  stationListLoc: { fontSize: 11, color: '#666', marginTop: 2 },
+  stationItemActionsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 10,
+    paddingVertical: 2,
+  },
+  actionBtnReset: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e1f5fe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 3,
+  },
+  actionBtnResetText: { fontSize: 11, color: '#0288d1', fontWeight: 'bold' },
+  actionBtnWifi: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 3,
+  },
+  actionBtnWifiText: { fontSize: 11, color: '#1b5e20', fontWeight: 'bold' },
+  actionBtnThreshold: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff3e0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 3,
+  },
+  actionBtnThresholdText: { fontSize: 11, color: '#e65100', fontWeight: 'bold' },
+  actionBtnDelete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffebee',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 3,
+  },
+  actionBtnDeleteText: { fontSize: 11, color: '#d32f2f', fontWeight: 'bold' },
+
+  primaryModalBtn: {
+    backgroundColor: '#1b5e20',
+    flexDirection: 'row',
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  primaryModalBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+
+  // Modals Overlay & Content
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 18, elevation: 5 },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', color: '#1b5e20' },
+  modalSubHeader: { fontSize: 11, color: '#666', marginTop: 1 },
+  modalSub: { fontSize: 11, color: '#666', marginBottom: 12, lineHeight: 16 },
+  inputLabel: { fontSize: 12, fontWeight: 'bold', color: '#333', marginBottom: 4, marginTop: 8 },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 42,
+    fontSize: 13,
+    backgroundColor: '#fafafa',
+  },
+  wifiSelectChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  wifiSelectChipActive: {
+    backgroundColor: '#1b5e20',
+    borderColor: '#1b5e20',
+  },
+  wifiSelectChipText: { fontSize: 11, color: '#333' },
+  wifiSelectChipTextActive: { color: '#fff', fontWeight: 'bold' },
+
+  thresholdContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 10,
+    marginVertical: 10,
+  },
+  thresholdLabel: { fontSize: 13, fontWeight: 'bold', color: '#333' },
+  thresholdHelper: { fontSize: 11, color: '#888', marginTop: 2 },
+  thresholdInput: {
+    borderWidth: 1.5,
+    borderColor: '#1b5e20',
+    backgroundColor: '#fff',
+    width: 70,
+    height: 44,
+    borderRadius: 8,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 6,
+    includeFontPadding: false,
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#1b5e20',
+  },
+  resetDefaultBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    backgroundColor: '#e8f5e9',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  resetDefaultText: { fontSize: 12, fontWeight: 'bold', color: '#1b5e20' },
+  saveButton: {
+    backgroundColor: '#1b5e20',
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  saveButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 });
