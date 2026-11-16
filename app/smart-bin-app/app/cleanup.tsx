@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Alert,
   ScrollView,
@@ -20,12 +20,10 @@ export default function CleanupScreen() {
     markLobbyCleaned,
   } = useSmartBin();
 
-  const [selectedBuilding, setSelectedBuilding] = useState<string>('Tất cả');
-
-  // Lọc các trạm có ít nhất 1 ngăn rác đạt hoặc vượt ngưỡng cần dọn (>= limit - 15)
+  // Lọc chỉ lấy các trạm có ngăn rác vượt ngưỡng hoặc sắp đầy cần dọn dẹp
   const needCleanLobbies = useMemo(() => {
-    return lobbies.filter((st) => {
-      // Nếu trạm mất kết nối hoàn toàn và không có dữ liệu thực, không coi là cần dọn
+    const list = lobbies.filter((st) => {
+      // Nếu trạm phần cứng mất kết nối hoàn toàn và không có dữ liệu thực, không coi là cần dọn
       if (st.status === 'OFFLINE' && st.isHardwareSync) return false;
 
       const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
@@ -35,26 +33,9 @@ export default function CleanupScreen() {
         (b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0
       );
     });
-  }, [lobbies, thresholdLimit]);
-
-  // Danh sách tòa nhà để lọc
-  const buildings = useMemo(() => {
-    const set = new Set<string>();
-    needCleanLobbies.forEach((st) => {
-      if (st.building) set.add(st.building);
-    });
-    return ['Tất cả', ...Array.from(set)];
-  }, [needCleanLobbies]);
-
-  // Danh sách hiển thị sau khi lọc theo tòa
-  const displayedLobbies = useMemo(() => {
-    let list = needCleanLobbies;
-    if (selectedBuilding !== 'Tất cả') {
-      list = list.filter((st) => st.building === selectedBuilding);
-    }
 
     // Sắp xếp điểm có mức rác đầy nhất lên đầu
-    return [...list].sort((a, b) => {
+    return list.sort((a, b) => {
       const maxA = a.bins
         ? Math.max(...Object.values(a.bins).map((x) => x.fill_percent || 0), 0)
         : 0;
@@ -63,21 +44,7 @@ export default function CleanupScreen() {
         : 0;
       return maxB - maxA;
     });
-  }, [needCleanLobbies, selectedBuilding]);
-
-  // Tổng số ngăn rác đang bị đầy
-  const totalFullBinsCount = useMemo(() => {
-    let count = 0;
-    needCleanLobbies.forEach((st) => {
-      const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
-      if (st.bins) {
-        Object.values(st.bins).forEach((b) => {
-          if ((b.fill_percent || 0) >= limit) count++;
-        });
-      }
-    });
-    return count;
-  }, [needCleanLobbies, thresholdLimit]);
+  }, [lobbies, thresholdLimit]);
 
   // Mở bảng điều khiển chi tiết của trạm
   const handleOpenMonitor = (st: Lobby) => {
@@ -112,27 +79,21 @@ export default function CleanupScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* ===== HEADER ===== */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => router.back()}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.headerTitle}>Trạm Cần Thu Gom</Text>
-            <Text style={styles.headerSubtitle}>
-              {needCleanLobbies.length > 0
-                ? `Có ${needCleanLobbies.length} điểm tập kết cần dọn rác`
-                : 'Tất cả điểm tập kết đều an toàn'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>{needCleanLobbies.length}</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Trạm Cần Thu Gom</Text>
+          <Text style={styles.headerSubtitle}>
+            {needCleanLobbies.length > 0
+              ? `Có ${needCleanLobbies.length} điểm tập kết cần dọn rác`
+              : 'Tất cả điểm tập kết đều an toàn'}
+          </Text>
         </View>
       </View>
 
@@ -140,84 +101,17 @@ export default function CleanupScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ===== THỐNG KÊ TỔNG QUAN ===== */}
-        <View style={styles.overviewRow}>
-          <View style={styles.overviewBox}>
-            <Text style={styles.overviewNumberRed}>{needCleanLobbies.length}</Text>
-            <Text style={styles.overviewLabel}>Điểm cần dọn</Text>
-          </View>
-          <View style={styles.overviewDivider} />
-          <View style={styles.overviewBox}>
-            <Text style={[styles.overviewNumberRed, { color: '#e65100' }]}>
-              {totalFullBinsCount}
+        {/* ===== CHỈ HIỂN THỊ DANH SÁCH TRẠM CẦN DỌN ===== */}
+        {needCleanLobbies.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="checkmark-circle-outline" size={56} color="#2e7d32" />
+            <Text style={styles.emptyTitle}>Không có trạm rác nào cần dọn</Text>
+            <Text style={styles.emptySub}>
+              Tất cả các điểm tập kết đều đang trong ngưỡng an toàn.
             </Text>
-            <Text style={styles.overviewLabel}>Ngăn vượt ngưỡng</Text>
-          </View>
-          <View style={styles.overviewDivider} />
-          <View style={styles.overviewBox}>
-            <Text style={styles.overviewNumberGreen}>{thresholdLimit}%</Text>
-            <Text style={styles.overviewLabel}>Ngưỡng báo động</Text>
-          </View>
-        </View>
-
-        {/* ===== BỘ LỌC TÒA NHÀ (NẾU CÓ NHIỀU TÒA) ===== */}
-        {buildings.length > 2 && (
-          <View style={styles.filterRow}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {buildings.map((b) => {
-                const isActive = selectedBuilding === b;
-                return (
-                  <TouchableOpacity
-                    key={b}
-                    style={[styles.filterChip, isActive && styles.filterChipActive]}
-                    onPress={() => setSelectedBuilding(b)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        isActive && styles.filterChipTextActive,
-                      ]}
-                    >
-                      {b}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* ===== DANH SÁCH HOẶC TRẠNG THÁI TRỐNG ===== */}
-        {displayedLobbies.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="checkmark-done" size={48} color="#2e7d32" />
-            </View>
-            <Text style={styles.emptyTitle}>Tất cả điểm tập kết đều sạch sẽ!</Text>
-            <Text style={styles.emptyDesc}>
-              Hiện không có trạm rác nào vượt ngưỡng hoặc cần thu gom. Hệ thống cảm biến đang theo dõi tự động liên tục.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.emptyBackBtn}
-              onPress={() => router.back()}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="arrow-back-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.emptyBackBtnText}>Quay về trang chính</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.emptyStationsBtn}
-              onPress={() => router.push('/stations')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.emptyStationsBtnText}>Xem danh sách tất cả trạm rác</Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          displayedLobbies.map((st) => {
+          needCleanLobbies.map((st) => {
             const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
             const organic = st.bins?.organic?.fill_percent || 0;
             const recycle = st.bins?.recycle?.fill_percent || 0;
@@ -228,16 +122,20 @@ export default function CleanupScreen() {
             const isCritical = maxFill >= limit;
 
             const binItems = [
-              { name: 'Nguy hại', color: '#d32f2f', percent: hazardous },
-              { name: 'Vô cơ', color: '#555555', percent: nonRecycle },
               { name: 'Hữu cơ', color: '#2e7d32', percent: organic },
               { name: 'Tái chế', color: '#0288d1', percent: recycle },
+              { name: 'Vô cơ', color: '#555555', percent: nonRecycle },
+              { name: 'Nguy hại', color: '#d32f2f', percent: hazardous },
             ];
 
             return (
               <View key={st.id} style={styles.stationCard}>
                 {/* Header thẻ trạm */}
-                <View style={styles.cardHeaderRow}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleOpenMonitor(st)}
+                  style={styles.cardHeaderRow}
+                >
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={styles.cardStationName}>{st.name}</Text>
                     <Text style={styles.cardStationLocation}>
@@ -266,39 +164,35 @@ export default function CleanupScreen() {
                         { color: isCritical ? '#d32f2f' : '#e65100' },
                       ]}
                     >
-                      {isCritical ? `Rác đầy (${maxFill}%)` : `Sắp đầy (${maxFill}%)`}
+                      {isCritical ? `Rác đầy (${maxFill}%)` : `Cần dọn (${maxFill}%)`}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
 
-                {/* Chi tiết từng ngăn rác với thanh tiến trình */}
-                <View style={styles.binsSection}>
-                  {binItems.map((bin) => {
-                    const isBinFull = bin.percent >= limit;
-                    const isBinAtRisk = bin.percent >= limit - 15 && bin.percent > 0;
-                    const barColor = isBinFull ? '#d32f2f' : isBinAtRisk ? '#e65100' : bin.color;
-
+                {/* 4 Mini Progress Bars */}
+                <View style={styles.binsGrid}>
+                  {binItems.map((comp) => {
+                    const isCompFull = comp.percent >= limit;
                     return (
-                      <View key={bin.name} style={styles.binRow}>
-                        <View style={styles.binRowHeader}>
-                          <Text style={styles.binName}>{bin.name}</Text>
+                      <View key={comp.name} style={styles.binCol}>
+                        <View style={styles.binColHeader}>
+                          <Text style={styles.binColName}>{comp.name}</Text>
                           <Text
                             style={[
-                              styles.binPercent,
-                              isBinFull && { color: '#d32f2f', fontWeight: 'bold' },
-                              !isBinFull && isBinAtRisk && { color: '#e65100' },
+                              styles.binColPct,
+                              { color: isCompFull ? '#d32f2f' : comp.color },
                             ]}
                           >
-                            {bin.percent}% {isBinFull ? '(ĐẦY)' : ''}
+                            {comp.percent}%
                           </Text>
                         </View>
-                        <View style={styles.progressBarTrack}>
+                        <View style={styles.miniBarBg}>
                           <View
                             style={[
-                              styles.progressBarFill,
+                              styles.miniBarFill,
                               {
-                                width: `${Math.min(bin.percent, 100)}%`,
-                                backgroundColor: barColor,
+                                width: `${Math.min(comp.percent, 100)}%`,
+                                backgroundColor: isCompFull ? '#d32f2f' : comp.color,
                               },
                             ]}
                           />
@@ -308,33 +202,34 @@ export default function CleanupScreen() {
                   })}
                 </View>
 
-                {/* Thông tin thu gom gần nhất */}
-                <View style={styles.lastCleanedRow}>
-                  <Ionicons name="time-outline" size={13} color="#777" />
-                  <Text style={styles.lastCleanedText}>
-                    Thu gom gần nhất: {st.lastCleaned || 'Hôm nay'}
-                  </Text>
-                </View>
+                {/* Footer thẻ trạm: Lần thu gom gần nhất & các nút thao tác */}
+                <View style={styles.cardFooterRow}>
+                  <View style={styles.lastCleanedBox}>
+                    <Ionicons name="time-outline" size={13} color="#777" />
+                    <Text style={styles.lastCleanedText}>
+                      Thu gom: {st.lastCleaned || 'Hôm nay'}
+                    </Text>
+                  </View>
 
-                {/* Các nút hành động: Xem bảng điều khiển & Ghi nhận đã thu gom */}
-                <View style={styles.cardActionsRow}>
-                  <TouchableOpacity
-                    style={styles.actionBtnMonitor}
-                    onPress={() => handleOpenMonitor(st)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="speedometer-outline" size={16} color="#1b5e20" />
-                    <Text style={styles.actionBtnMonitorText}>Bảng điều khiển</Text>
-                  </TouchableOpacity>
+                  <View style={styles.cardActionsRow}>
+                    <TouchableOpacity
+                      style={styles.actionBtnMonitor}
+                      onPress={() => handleOpenMonitor(st)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="speedometer-outline" size={14} color="#1b5e20" />
+                      <Text style={styles.actionBtnMonitorText}>Xem trạm</Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.actionBtnClean}
-                    onPress={() => handleMarkCleaned(st)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-                    <Text style={styles.actionBtnCleanText}>Ghi nhận đã dọn</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionBtnClean}
+                      onPress={() => handleMarkCleaned(st)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={14} color="#fff" />
+                      <Text style={styles.actionBtnCleanText}>Đã thu gom</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             );
@@ -357,13 +252,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
-    flex: 1,
   },
   backBtn: {
     width: 36,
@@ -383,222 +272,119 @@ const styles = StyleSheet.create({
     color: '#c8e6c9',
     marginTop: 2,
   },
-  headerBadge: {
-    backgroundColor: '#d32f2f',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  headerBadgeText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
+    flexGrow: 1,
   },
-  overviewRow: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: '#e8edf2',
-    marginBottom: 14,
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  overviewBox: {
-    alignItems: 'center',
+  emptyContainer: {
     flex: 1,
-  },
-  overviewDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: '#e0e0e0',
-  },
-  overviewNumberRed: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#d32f2f',
-  },
-  overviewNumberGreen: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1b5e20',
-  },
-  overviewLabel: {
-    fontSize: 11,
-    color: '#666',
-    marginTop: 2,
-  },
-  filterRow: {
-    marginBottom: 12,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#e8edf2',
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: '#1b5e20',
-  },
-  filterChipText: {
-    fontSize: 13,
-    color: '#555',
-    fontWeight: '500',
-  },
-  filterChipTextActive: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  emptyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e8edf2',
-    marginTop: 20,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#e8f5e9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    paddingVertical: 80,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#1b5e20',
+    color: '#333',
+    marginTop: 14,
+    marginBottom: 6,
     textAlign: 'center',
-    marginBottom: 8,
   },
-  emptyDesc: {
+  emptySub: {
     fontSize: 13,
-    color: '#666',
+    color: '#777',
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 20,
-  },
-  emptyBackBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1b5e20',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginBottom: 10,
-    width: '100%',
-    justifyContent: 'center',
-  },
-  emptyBackBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  emptyStationsBtn: {
-    paddingVertical: 10,
-  },
-  emptyStationsBtnText: {
-    color: '#1b5e20',
-    fontSize: 13,
-    fontWeight: '600',
   },
   stationCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 14,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#e8edf2',
-    marginBottom: 14,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
+    shadowRadius: 4,
     elevation: 2,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingBottom: 10,
   },
   cardStationName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#222',
   },
   cardStationLocation: {
     fontSize: 12,
     color: '#666',
-    marginTop: 3,
+    marginTop: 2,
   },
   urgencyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   urgencyText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
   },
-  binsSection: {
-    paddingVertical: 12,
+  binsGrid: {
+    flexDirection: 'row',
     gap: 8,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f5f5f5',
   },
-  binRow: {
-    marginBottom: 2,
+  binCol: {
+    flex: 1,
   },
-  binRowHeader: {
+  binColHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
   },
-  binName: {
-    fontSize: 12,
-    color: '#444',
+  binColName: {
+    fontSize: 11,
+    color: '#555',
     fontWeight: '500',
   },
-  binPercent: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
+  binColPct: {
+    fontSize: 11,
+    fontWeight: 'bold',
   },
-  progressBarTrack: {
-    height: 7,
+  miniBarBg: {
+    height: 5,
     backgroundColor: '#eee',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
   },
-  progressBarFill: {
+  miniBarFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 3,
   },
-  lastCleanedRow: {
+  cardFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingTop: 8,
+    justifyContent: 'space-between',
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#f5f5f5',
-    marginBottom: 12,
+  },
+  lastCleanedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
   },
   lastCleanedText: {
     fontSize: 11,
@@ -606,35 +392,33 @@ const styles = StyleSheet.create({
   },
   cardActionsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   actionBtnMonitor: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: '#e8f5e9',
-    borderRadius: 10,
+    borderRadius: 8,
   },
   actionBtnMonitorText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
     color: '#1b5e20',
   },
   actionBtnClean: {
-    flex: 1.2,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: '#1b5e20',
-    borderRadius: 10,
+    borderRadius: 8,
   },
   actionBtnCleanText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
     color: '#fff',
   },
