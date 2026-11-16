@@ -58,6 +58,9 @@ function RootLayoutNav() {
           {/* Màn hình Giám Sát Chi Tiết Trạm IoT */}
           <Stack.Screen name="monitor" options={{ headerShown: false }} />
           
+          {/* Màn hình Quản Lý Danh Sách Trạm Rác */}
+          <Stack.Screen name="stations" options={{ headerShown: false }} />
+          
           {/* Modal hệ thống nếu có */}
           <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
