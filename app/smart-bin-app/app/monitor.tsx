@@ -67,6 +67,8 @@ export default function MonitorScreen() {
     selectedLobby ||
     lobbies[0];
 
+  const isOffline = currentLobby.status === 'OFFLINE';
+
   // Lấy lịch sử thu gom riêng của trạm này
   useEffect(() => {
     const historyRef = ref(db, 'smart_bin/history');
@@ -111,6 +113,10 @@ export default function MonitorScreen() {
 
   // Điều khiển servo cửa thả rác
   const handleToggleDoor = async (value: boolean) => {
+    if (isOffline) {
+      Alert.alert('Không thể điều khiển', 'Trạm rác đang ngoại tuyến hoặc đã ngắt nguồn điện!');
+      return;
+    }
     try {
       await toggleDoor(currentLobby.id, value);
     } catch (err: any) {
@@ -243,8 +249,12 @@ export default function MonitorScreen() {
           {/* Header trong thẻ */}
           <View style={styles.cardHeaderRow}>
             <View style={styles.cardHeaderLeft}>
-              <View style={styles.chipIconBox}>
-                <Ionicons name="hardware-chip-outline" size={22} color="#fff" />
+              <View style={[styles.chipIconBox, isOffline && { backgroundColor: '#c62828' }]}>
+                <Ionicons
+                  name={isOffline ? 'cloud-offline-outline' : 'hardware-chip-outline'}
+                  size={22}
+                  color="#fff"
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>Bảng điều khiển</Text>
@@ -254,16 +264,31 @@ export default function MonitorScreen() {
               </View>
             </View>
 
-            <View style={styles.syncStatusBadge}>
-              <View style={styles.orangeDot} />
-              <Text style={styles.syncStatusText}>DỮ LIỆU ĐÃ ĐỒNG BỘ</Text>
+            <View style={[styles.syncStatusBadge, isOffline && styles.syncStatusBadgeOffline]}>
+              <View style={[styles.orangeDot, isOffline && styles.redDot]} />
+              <Text style={[styles.syncStatusText, isOffline && styles.syncStatusTextOffline]}>
+                {isOffline ? 'MẤT KẾT NỐI IOT' : 'DỮ LIỆU ĐÃ ĐỒNG BỘ'}
+              </Text>
             </View>
           </View>
 
           {/* Dòng ghi chú thời gian cập nhật */}
           <View style={styles.updateTimeRow}>
-            <Ionicons name="time-outline" size={13} color="#888" />
-            <Text style={styles.updateTimeText}>Dữ liệu cập nhật lúc {timeUpdatedString}</Text>
+            <Ionicons
+              name={isOffline ? 'alert-circle-outline' : 'time-outline'}
+              size={13}
+              color={isOffline ? '#d32f2f' : '#888'}
+            />
+            <Text
+              style={[
+                styles.updateTimeText,
+                isOffline && { color: '#d32f2f', fontWeight: 'bold' },
+              ]}
+            >
+              {isOffline
+                ? 'Thiết bị ngoại tuyến · Đã ngắt nguồn hoặc mất mạng'
+                : `Dữ liệu cập nhật lúc ${timeUpdatedString}`}
+            </Text>
           </View>
 
           {/* ===== NGƯỠNG ĐẦY RÁC ===== */}
@@ -471,13 +496,13 @@ export default function MonitorScreen() {
                 <View
                   style={[
                     styles.doorIconCircle,
-                    { backgroundColor: currentLobby.is_door_open ? '#e8f5e9' : '#e1f5fe' },
+                    { backgroundColor: isOffline ? '#ffebee' : currentLobby.is_door_open ? '#e8f5e9' : '#e1f5fe' },
                   ]}
                 >
                   <Ionicons
-                    name={currentLobby.is_door_open ? 'lock-open-outline' : 'lock-closed-outline'}
+                    name={isOffline ? 'cloud-offline-outline' : currentLobby.is_door_open ? 'lock-open-outline' : 'lock-closed-outline'}
                     size={22}
-                    color={currentLobby.is_door_open ? '#1b5e20' : '#0288d1'}
+                    color={isOffline ? '#d32f2f' : currentLobby.is_door_open ? '#1b5e20' : '#0288d1'}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -485,17 +510,18 @@ export default function MonitorScreen() {
                   <Text
                     style={[
                       styles.doorStatusText,
-                      { color: currentLobby.is_door_open ? '#1b5e20' : '#f57c00' },
+                      { color: isOffline ? '#d32f2f' : currentLobby.is_door_open ? '#1b5e20' : '#f57c00' },
                     ]}
                   >
-                    {currentLobby.is_door_open ? 'Đang mở' : 'Đang đóng'}
+                    {isOffline ? 'Thiết bị ngoại tuyến' : currentLobby.is_door_open ? 'Đang mở' : 'Đang đóng'}
                   </Text>
                 </View>
                 <Switch
-                  value={!!currentLobby.is_door_open}
+                  value={!isOffline && !!currentLobby.is_door_open}
                   onValueChange={handleToggleDoor}
+                  disabled={isOffline}
                   trackColor={{ false: '#e0e0e0', true: '#81c784' }}
-                  thumbColor={currentLobby.is_door_open ? '#1b5e20' : '#ffffff'}
+                  thumbColor={!isOffline && currentLobby.is_door_open ? '#1b5e20' : '#ffffff'}
                 />
               </View>
             </View>
@@ -695,8 +721,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
+  syncStatusBadgeOffline: {
+    backgroundColor: '#ffebee',
+  },
   orangeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#f57c00' },
+  redDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#d32f2f' },
   syncStatusText: { fontSize: 10, fontWeight: 'bold', color: '#e65100' },
+  syncStatusTextOffline: { fontSize: 10, fontWeight: 'bold', color: '#d32f2f' },
 
   updateTimeRow: {
     flexDirection: 'row',

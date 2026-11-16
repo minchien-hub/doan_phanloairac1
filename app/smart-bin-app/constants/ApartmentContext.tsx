@@ -60,17 +60,17 @@ const DEFAULT_LOBBIES: Lobby[] = [
     name: 'Sảnh tiếp đón',
     building: 'Nhà Văn hóa Thiếu nhi',
     location: 'Cổng chính - Khu vực tiếp đón',
-    status: 'ONLINE',
+    status: 'OFFLINE',
     isHardwareSync: true,
     camera_url: '',
     is_door_open: false,
     lastCleaned: 'Hôm nay, 13:00',
     threshold: 80,
     bins: {
-      organic: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
-      recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
-      non_recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
-      hazardous: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: true },
+      organic: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+      recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+      non_recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+      hazardous: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
     },
   },
   {
@@ -167,29 +167,93 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // 3. Lắng nghe dữ liệu phần cứng thật (Raspberry Pi) từ smart_bin
+  // 3. Lắng nghe dữ liệu phần cứng thật (Raspberry Pi / ESP32) từ smart_bin
+  const lastHardwarePingRef = useRef<number>(0);
+  const hardwareUpdatesCountRef = useRef<number>(0);
+
   useEffect(() => {
     const binsRef = ref(db, 'smart_bin/bins');
     const cameraRef = ref(db, 'smart_bin/camera');
     const controlRef = ref(db, 'smart_bin/control');
     const statusRef = ref(db, 'smart_bin/status');
+    const heartbeatRef = ref(db, 'smart_bin/heartbeat');
+
+    // Timer giám sát nhịp tim phần cứng (Watchdog):
+    // Cứ mỗi 1 giây kiểm tra: Nếu quá 5 giây không có gói tin mới từ ESP32 -> xác định ĐÃ RÚT ĐIỆN / MẤT KẾT NỐI
+    const watchdogInterval = setInterval(() => {
+      const now = Date.now();
+      const lastPing = lastHardwarePingRef.current;
+
+      if (lastPing > 0 && now - lastPing > 5000) {
+        setLobbies((prev) =>
+          prev.map((lb) => {
+            if (lb.isHardwareSync && lb.status !== 'OFFLINE') {
+              return {
+                ...lb,
+                status: 'OFFLINE',
+                bins: {
+                  organic: { ...lb.bins.organic, sensor_ok: false },
+                  recycle: { ...lb.bins.recycle, sensor_ok: false },
+                  non_recycle: { ...lb.bins.non_recycle, sensor_ok: false },
+                  hazardous: { ...lb.bins.hazardous, sensor_ok: false },
+                },
+              };
+            }
+            return lb;
+          })
+        );
+
+        try {
+          set(statusRef, 'OFFLINE');
+          set(ref(db, 'smart_bin/lobbies/lobby_a/status'), 'OFFLINE');
+        } catch (e) {}
+      }
+    }, 1000);
 
     const unsubBins = onValue(binsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        // Có dữ liệu từ cảm biến thực tế => Trạm phần cứng đang hoạt động ONLINE
-        const hasSensors = !!(data && Object.keys(data).length > 0);
+        hardwareUpdatesCountRef.current += 1;
+        const count = hardwareUpdatesCountRef.current;
+
+        // Ghi nhận thời điểm nhận gói tin
+        lastHardwarePingRef.current = Date.now();
+
+        // Nếu nhận được gói tin dữ liệu cảm biến thực
         setLobbies((prev) =>
           prev.map((lb) => {
             if (lb.isHardwareSync) {
               return {
                 ...lb,
-                status: hasSensors ? 'ONLINE' : lb.status,
+                status: 'ONLINE',
                 bins: {
-                  organic: data.organic || lb.bins.organic,
-                  recycle: data.recycle || lb.bins.recycle,
-                  non_recycle: data.non_recycle || lb.bins.non_recycle,
-                  hazardous: data.hazardous || lb.bins.hazardous,
+                  organic: { ...(data.organic || lb.bins.organic), sensor_ok: true },
+                  recycle: { ...(data.recycle || lb.bins.recycle), sensor_ok: true },
+                  non_recycle: { ...(data.non_recycle || lb.bins.non_recycle), sensor_ok: true },
+                  hazardous: { ...(data.hazardous || lb.bins.hazardous), sensor_ok: true },
+                },
+              };
+            }
+            return lb;
+          })
+        );
+      }
+    });
+
+    const unsubHeartbeat = onValue(heartbeatRef, (snapshot) => {
+      if (snapshot.exists()) {
+        lastHardwarePingRef.current = Date.now();
+        setLobbies((prev) =>
+          prev.map((lb) => {
+            if (lb.isHardwareSync && lb.status !== 'ONLINE') {
+              return {
+                ...lb,
+                status: 'ONLINE',
+                bins: {
+                  organic: { ...lb.bins.organic, sensor_ok: true },
+                  recycle: { ...lb.bins.recycle, sensor_ok: true },
+                  non_recycle: { ...lb.bins.non_recycle, sensor_ok: true },
+                  hazardous: { ...lb.bins.hazardous, sensor_ok: true },
                 },
               };
             }
@@ -224,7 +288,18 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
         const isOnline = val === 'ONLINE' || val === 'ON' || val === true;
         setLobbies((prev) =>
           prev.map((lb) =>
-            lb.isHardwareSync ? { ...lb, status: isOnline ? 'ONLINE' : 'OFFLINE' } : lb
+            lb.isHardwareSync
+              ? {
+                  ...lb,
+                  status: isOnline ? 'ONLINE' : 'OFFLINE',
+                  bins: {
+                    organic: { ...lb.bins.organic, sensor_ok: isOnline },
+                    recycle: { ...lb.bins.recycle, sensor_ok: isOnline },
+                    non_recycle: { ...lb.bins.non_recycle, sensor_ok: isOnline },
+                    hazardous: { ...lb.bins.hazardous, sensor_ok: isOnline },
+                  },
+                }
+              : lb
           )
         );
       }
@@ -244,7 +319,9 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      clearInterval(watchdogInterval);
       unsubBins();
+      unsubHeartbeat();
       unsubCamera();
       unsubStatus();
       unsubControl();
@@ -294,13 +371,14 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
           return firebaseList.map((st) => {
             if (st.isHardwareSync) {
               const prevHw = prev.find((p) => p.isHardwareSync);
-              const isHwOnline = (prevHw && prevHw.status === 'ONLINE') || st.status === 'ONLINE';
+              const isHwOnline = prevHw?.status === 'ONLINE' && st.status === 'ONLINE';
               return {
                 ...st,
                 status: isHwOnline ? 'ONLINE' : 'OFFLINE',
                 camera_url: prevHw?.camera_url || st.camera_url,
                 is_door_open:
                   prevHw?.is_door_open !== undefined ? prevHw.is_door_open : st.is_door_open,
+                bins: prevHw?.bins || st.bins,
               };
             }
             return {

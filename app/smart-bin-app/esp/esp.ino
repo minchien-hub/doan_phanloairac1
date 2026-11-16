@@ -202,8 +202,10 @@ void updateFirebaseData(int index, int percent, float dist, String status, bool 
     Firebase.setString(fbdo, path + "/status", status);
     Firebase.setBool(fbdo, path + "/sensor_ok", sensorOk);
 
-    // Đồng bộ trạng thái trạm đang hoạt động
+    // Đồng bộ trạng thái trạm đang hoạt động và gửi nhịp tim (Heartbeat)
     Firebase.setString(fbdo, "/smart_bin/status", "ONLINE");
+    Firebase.setString(fbdo, "/smart_bin/lobbies/lobby_a/status", "ONLINE");
+    Firebase.setInt(fbdo, "/smart_bin/heartbeat", (int)(millis() / 1000));
   }
 }
 
