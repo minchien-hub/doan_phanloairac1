@@ -24,7 +24,6 @@ export default function HomeScreen() {
     addLobby,
   } = useSmartBin();
 
-  const [filterOnlyNeedClean, setFilterOnlyNeedClean] = useState<boolean>(false);
   const alertedStationsRef = useRef<Set<string>>(new Set());
 
   // ===== MODAL THÊM ĐIỂM TẬP KẾT MỚI =====
@@ -45,25 +44,9 @@ export default function HomeScreen() {
     return st.bins && Object.values(st.bins).some((b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0);
   });
 
-  // Lọc và sắp xếp danh sách điểm tập kết
+  // Sắp xếp danh sách điểm tập kết: Điểm có mức rác cao nhất tự động nổi lên đầu
   const filteredLobbies = useMemo(() => {
-    let list = lobbies;
-
-    // Lọc theo trạng thái "Cần dọn rác" nếu người dùng bấm vào thẻ thống kê
-    if (filterOnlyNeedClean) {
-      list = list.filter((st) => {
-        const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
-        return (
-          st.bins &&
-          Object.values(st.bins).some(
-            (b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0
-          )
-        );
-      });
-    }
-
-    // Sắp xếp: Điểm có mức rác đầy nhất tự động nổi lên đầu
-    return [...list].sort((a, b) => {
+    return [...lobbies].sort((a, b) => {
       const maxA = a.bins
         ? Math.max(...Object.values(a.bins).map((x) => x.fill_percent || 0), 0)
         : 0;
@@ -72,7 +55,7 @@ export default function HomeScreen() {
         : 0;
       return maxB - maxA;
     });
-  }, [lobbies, filterOnlyNeedClean, thresholdLimit]);
+  }, [lobbies]);
 
   // Hiển thị thông báo popup khi có điểm tập kết vượt ngưỡng (nếu cài đặt bật)
   useEffect(() => {
@@ -195,33 +178,36 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.statCard,
-              filterOnlyNeedClean && styles.statCardWarnBorder,
+              atRiskLobbies.length > 0 && styles.statCardWarnBorder,
             ]}
-            onPress={() => setFilterOnlyNeedClean((prev) => !prev)}
+            onPress={() => router.push('/cleanup')}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.statNumber,
-                atRiskLobbies.length > 0 && { color: '#f57c00' },
+                atRiskLobbies.length > 0 && { color: '#e65100' },
               ]}
             >
               {atRiskLobbies.length}
             </Text>
-            <Text style={styles.statLabel}>
-              {filterOnlyNeedClean ? 'Đang lọc cần dọn' : 'Cần dọn rác'}
-            </Text>
+            <Text style={styles.statLabel}>Cần dọn rác</Text>
           </TouchableOpacity>
         </View>
 
         {/* ===== ALERT BANNER ===== */}
         {fullLobbies.length > 0 ? (
-          <View style={[styles.alertBanner, styles.alertBannerWarn]}>
+          <TouchableOpacity
+            style={[styles.alertBanner, styles.alertBannerWarn]}
+            onPress={() => router.push('/cleanup')}
+            activeOpacity={0.8}
+          >
             <Ionicons name="warning" size={18} color="#d32f2f" />
             <Text style={[styles.alertBannerText, { color: '#d32f2f' }]}>
-              Có {fullLobbies.length} điểm tập kết đạt ngưỡng đầy ({thresholdLimit}%). Cần điều phối thu gom ngay!
+              Có {fullLobbies.length} điểm tập kết đạt ngưỡng đầy ({thresholdLimit}%). Bấm để xem và thu gom!
             </Text>
-          </View>
+            <Ionicons name="chevron-forward" size={16} color="#d32f2f" />
+          </TouchableOpacity>
         ) : (
           <View style={[styles.alertBanner, styles.alertBannerOk]}>
             <Ionicons name="checkmark-circle" size={18} color="#2e7d32" />
@@ -248,20 +234,11 @@ export default function HomeScreen() {
         {/* ===== DANH SÁCH ĐIỂM TẬP KẾT HOẶC TRẠNG THÁI TRỐNG ===== */}
         {filteredLobbies.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="checkmark-circle-outline" size={40} color="#2e7d32" />
-            <Text style={styles.emptyTitle}>Không có điểm tập kết cần dọn rác</Text>
+            <Ionicons name="business-outline" size={40} color="#666" />
+            <Text style={styles.emptyTitle}>Chưa có điểm tập kết nào</Text>
             <Text style={styles.emptySub}>
-              Tất cả các điểm tập kết đều đang ở mức an toàn.
+              Bấm dấu (+) phía trên để thêm điểm tập kết mới vào hệ thống.
             </Text>
-            {filterOnlyNeedClean && (
-              <TouchableOpacity
-                style={styles.resetFilterBtn}
-                onPress={() => setFilterOnlyNeedClean(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.resetFilterText}>Xem tất cả điểm tập kết</Text>
-              </TouchableOpacity>
-            )}
           </View>
         ) : (
           filteredLobbies.map((st) => {
