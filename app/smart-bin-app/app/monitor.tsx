@@ -526,14 +526,14 @@ export default function MonitorScreen() {
           {isSensorExpanded && (
             <View style={styles.sensorContent}>
               <View style={styles.sensorSubHeaderRow}>
-                <Text style={styles.sensorSubHeaderTitle}>Khoảng cách theo từng ngăn</Text>
+                <Text style={styles.sensorSubHeaderTitle}>Trạng thái theo từng ngăn</Text>
                 <Text style={styles.sensorThresholdText}>Ngưỡng {stThreshold}%</Text>
               </View>
 
               <View style={styles.sensorInnerCard}>
                 {sensorItems.map((s, idx) => {
-                  const dist = Math.round(Number(s.data?.distance_cm) || 0);
-                  const isOk = s.data?.sensor_ok !== false;
+                  const isOffline = currentLobby.status === 'OFFLINE';
+                  const isOk = !isOffline && s.data?.sensor_ok !== false;
 
                   return (
                     <View key={s.key}>
@@ -550,9 +550,7 @@ export default function MonitorScreen() {
                         </View>
                         {isOk ? (
                           <View style={styles.sensorOkBadge}>
-                            <Text style={styles.sensorOkText}>
-                              {dist > 0 ? `${dist} cm` : 'Cảm biến OK'}
-                            </Text>
+                            <Text style={styles.sensorOkText}>Cảm biến OK</Text>
                           </View>
                         ) : (
                           <View style={styles.sensorErrBadge}>
