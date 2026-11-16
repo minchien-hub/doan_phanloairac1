@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -21,7 +22,19 @@ export default function HomeScreen() {
     setSelectedLobbyId,
   } = useSmartBin();
 
+  const [selectedBuilding, setSelectedBuilding] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterOnlyNeedClean, setFilterOnlyNeedClean] = useState<boolean>(false);
   const alertedStationsRef = useRef<Set<string>>(new Set());
+
+  // Danh sách các tòa/khu vực tự động trích xuất từ lobbies
+  const buildings = useMemo(() => {
+    const setB = new Set<string>();
+    lobbies.forEach((s) => {
+      if (s.building) setB.add(s.building);
+    });
+    return ['ALL', ...Array.from(setB)];
+  }, [lobbies]);
 
   // Thống kê điểm tập kết đầy hoặc có nguy cơ
   const fullLobbies = lobbies.filter((st) => {
@@ -34,6 +47,51 @@ export default function HomeScreen() {
     const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
     return st.bins && Object.values(st.bins).some((b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0);
   });
+
+  // Lọc và sắp xếp danh sách điểm tập kết (Hỗ trợ khi số lượng điểm nhiều)
+  const filteredLobbies = useMemo(() => {
+    let list = lobbies;
+
+    // 1. Lọc theo trạng thái "Cần dọn rác" nếu người dùng bấm vào thẻ thống kê
+    if (filterOnlyNeedClean) {
+      list = list.filter((st) => {
+        const limit = st.threshold !== undefined ? st.threshold : thresholdLimit;
+        return (
+          st.bins &&
+          Object.values(st.bins).some(
+            (b) => (b.fill_percent || 0) >= limit - 15 && (b.fill_percent || 0) > 0
+          )
+        );
+      });
+    }
+
+    // 2. Lọc theo tòa / khu vực được chọn từ hàng Chip
+    if (selectedBuilding !== 'ALL') {
+      list = list.filter((s) => s.building === selectedBuilding);
+    }
+
+    // 3. Lọc theo từ khóa tìm kiếm (tên điểm, địa chỉ, tòa nhà)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.location.toLowerCase().includes(q) ||
+          (s.building && s.building.toLowerCase().includes(q))
+      );
+    }
+
+    // 4. Sắp xếp thông minh: Điểm có mức rác đầy nhất tự động nổi lên đầu
+    return [...list].sort((a, b) => {
+      const maxA = a.bins
+        ? Math.max(...Object.values(a.bins).map((x) => x.fill_percent || 0), 0)
+        : 0;
+      const maxB = b.bins
+        ? Math.max(...Object.values(b.bins).map((x) => x.fill_percent || 0), 0)
+        : 0;
+      return maxB - maxA;
+    });
+  }, [lobbies, selectedBuilding, searchQuery, filterOnlyNeedClean, thresholdLimit]);
 
   // Hiển thị thông báo popup khi có điểm tập kết vượt ngưỡng (nếu cài đặt bật)
   useEffect(() => {
@@ -107,14 +165,28 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ===== STATS ROW (2 CARDS) ===== */}
+        {/* ===== STATS ROW (2 CARDS BẤM ĐƯỢC ĐỂ LỌC NHANH) ===== */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, styles.statCardGreenBorder]}>
+          <TouchableOpacity
+            style={[
+              styles.statCard,
+              !filterOnlyNeedClean && styles.statCardGreenBorder,
+            ]}
+            onPress={() => setFilterOnlyNeedClean(false)}
+            activeOpacity={0.8}
+          >
             <Text style={styles.statNumberGreen}>{lobbies.length}</Text>
             <Text style={styles.statLabel}>Điểm tập kết</Text>
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.statCard}>
+          <TouchableOpacity
+            style={[
+              styles.statCard,
+              filterOnlyNeedClean && styles.statCardWarnBorder,
+            ]}
+            onPress={() => setFilterOnlyNeedClean((prev) => !prev)}
+            activeOpacity={0.8}
+          >
             <Text
               style={[
                 styles.statNumber,
@@ -123,8 +195,10 @@ export default function HomeScreen() {
             >
               {atRiskLobbies.length}
             </Text>
-            <Text style={styles.statLabel}>Cần dọn rác</Text>
-          </View>
+            <Text style={styles.statLabel}>
+              {filterOnlyNeedClean ? 'Đang lọc cần dọn' : 'Cần dọn rác'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* ===== ALERT BANNER ===== */}
@@ -144,6 +218,53 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ===== THANH TÌM KIẾM NHANH (GIẢI QUYẾT KHI SỐ LƯỢNG ĐIỂM NHIỀU) ===== */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchBox}>
+            <Ionicons name="search-outline" size={16} color="#777" style={{ marginRight: 6 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Tìm kiếm điểm tập kết, vị trí..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={16} color="#888" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* ===== HÀNG CHIP LỌC THEO TÒA / KHU VỰC ===== */}
+        <View style={styles.filterSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
+            {buildings.map((b) => {
+              const isActive = selectedBuilding === b;
+              return (
+                <TouchableOpacity
+                  key={b}
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  onPress={() => setSelectedBuilding(b)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {b === 'ALL' ? 'Tất cả tòa' : b}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {/* ===== SECTION HEADER ROW ===== */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Các điểm tập kết</Text>
@@ -153,106 +274,127 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ===== COLLECTION POINTS CARDS LIST ===== */}
-        {lobbies.map((st) => {
-          const statusInfo = getLobbyOverallStatus(st);
-          const organicData = st.bins?.organic || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
-          const recycleData = st.bins?.recycle || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
-          const nonRecycleData = st.bins?.non_recycle || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
-          const hazardousData = st.bins?.hazardous || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
-
-          const binItems = [
-            { name: 'Hữu cơ', color: '#2e7d32', data: organicData },
-            { name: 'Tái chế', color: '#0288d1', data: recycleData },
-            { name: 'Vô cơ', color: '#555555', data: nonRecycleData },
-            { name: 'Nguy hại', color: '#d32f2f', data: hazardousData },
-          ];
-
-          return (
+        {/* ===== DANH SÁCH ĐIỂM TẬP KẾT HOẶC TRẠNG THÁI TRỐNG ===== */}
+        {filteredLobbies.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="search-outline" size={40} color="#bbb" />
+            <Text style={styles.emptyTitle}>Không tìm thấy điểm tập kết phù hợp</Text>
+            <Text style={styles.emptySub}>
+              Thử tìm kiếm với từ khóa khác hoặc đặt lại bộ lọc tòa nhà
+            </Text>
             <TouchableOpacity
-              key={st.id}
-              activeOpacity={0.8}
-              style={[styles.lobbyCard, statusInfo.isFull && styles.lobbyCardAlert]}
+              style={styles.resetFilterBtn}
               onPress={() => {
-                setSelectedLobbyId(st.id);
-                router.push({ pathname: '/monitor', params: { lobbyId: st.id } });
+                setSelectedBuilding('ALL');
+                setSearchQuery('');
+                setFilterOnlyNeedClean(false);
               }}
+              activeOpacity={0.8}
             >
-              {/* Card Header */}
-              <View style={styles.lobbyHeader}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.lobbyName}>{st.name}</Text>
-                  <Text style={styles.lobbyLocation}>
-                    <Ionicons
-                      name="location-outline"
-                      size={12}
-                      color={statusInfo.isFull ? '#d32f2f' : '#666'}
-                    />{' '}
-                    {st.location} ({st.building})
-                  </Text>
-                </View>
-
-                <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
-                    {statusInfo.text}
-                  </Text>
-                </View>
-              </View>
-
-              {/* 4 Mini Progress Bars */}
-              <View style={styles.binsGrid}>
-                {binItems.map((comp) => {
-                  const pct = Math.min(Math.max(comp.data.fill_percent || 0, 0), 100);
-                  const stThreshold = st.threshold !== undefined ? st.threshold : thresholdLimit;
-                  const isCompFull = pct >= stThreshold;
-                  return (
-                    <View key={comp.name} style={styles.binCol}>
-                      <View style={styles.binColHeader}>
-                        <Text style={styles.binColName}>{comp.name}</Text>
-                        <Text
-                          style={[
-                            styles.binColPct,
-                            { color: isCompFull ? '#d32f2f' : comp.color },
-                          ]}
-                        >
-                          {pct}%
-                        </Text>
-                      </View>
-                      <View style={styles.miniBarBg}>
-                        <View
-                          style={[
-                            styles.miniBarFill,
-                            {
-                              width: `${pct}%`,
-                              backgroundColor: isCompFull ? '#d32f2f' : comp.color,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Cảnh báo thiết bị ngoại tuyến (chỉ hiển thị nếu trạm OFFLINE) */}
-              {st.status === 'OFFLINE' && (
-                <View style={styles.offlineNoticeBox}>
-                  <Text style={styles.offlineNoticeText}>
-                    Thiết bị ngoại tuyến · số liệu chưa được xác nhận
-                  </Text>
-                </View>
-              )}
-
-              {/* Card Footer: Lần thu gom gần nhất */}
-              <View style={styles.lobbyFooter}>
-                <Ionicons name="time-outline" size={13} color="#888" style={{ marginRight: 4 }} />
-                <Text style={styles.lastCleanText}>
-                  Thu gom: {st.lastCleaned || 'Hôm nay, 15:25'}
-                </Text>
-              </View>
+              <Text style={styles.resetFilterText}>Xem tất cả điểm tập kết</Text>
             </TouchableOpacity>
-          );
-        })}
+          </View>
+        ) : (
+          filteredLobbies.map((st) => {
+            const statusInfo = getLobbyOverallStatus(st);
+            const organicData = st.bins?.organic || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
+            const recycleData = st.bins?.recycle || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
+            const nonRecycleData = st.bins?.non_recycle || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
+            const hazardousData = st.bins?.hazardous || { fill_percent: 0, distance_cm: 0, status: 'NORMAL' };
+
+            const binItems = [
+              { name: 'Hữu cơ', color: '#2e7d32', data: organicData },
+              { name: 'Tái chế', color: '#0288d1', data: recycleData },
+              { name: 'Vô cơ', color: '#555555', data: nonRecycleData },
+              { name: 'Nguy hại', color: '#d32f2f', data: hazardousData },
+            ];
+
+            return (
+              <TouchableOpacity
+                key={st.id}
+                activeOpacity={0.8}
+                style={[styles.lobbyCard, statusInfo.isFull && styles.lobbyCardAlert]}
+                onPress={() => {
+                  setSelectedLobbyId(st.id);
+                  router.push({ pathname: '/monitor', params: { lobbyId: st.id } });
+                }}
+              >
+                {/* Card Header */}
+                <View style={styles.lobbyHeader}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.lobbyName}>{st.name}</Text>
+                    <Text style={styles.lobbyLocation}>
+                      <Ionicons
+                        name="location-outline"
+                        size={12}
+                        color={statusInfo.isFull ? '#d32f2f' : '#666'}
+                      />{' '}
+                      {st.location} ({st.building})
+                    </Text>
+                  </View>
+
+                  <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
+                      {statusInfo.text}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* 4 Mini Progress Bars */}
+                <View style={styles.binsGrid}>
+                  {binItems.map((comp) => {
+                    const pct = Math.min(Math.max(comp.data.fill_percent || 0, 0), 100);
+                    const stThreshold = st.threshold !== undefined ? st.threshold : thresholdLimit;
+                    const isCompFull = pct >= stThreshold;
+                    return (
+                      <View key={comp.name} style={styles.binCol}>
+                        <View style={styles.binColHeader}>
+                          <Text style={styles.binColName}>{comp.name}</Text>
+                          <Text
+                            style={[
+                              styles.binColPct,
+                              { color: isCompFull ? '#d32f2f' : comp.color },
+                            ]}
+                          >
+                            {pct}%
+                          </Text>
+                        </View>
+                        <View style={styles.miniBarBg}>
+                          <View
+                            style={[
+                              styles.miniBarFill,
+                              {
+                                width: `${pct}%`,
+                                backgroundColor: isCompFull ? '#d32f2f' : comp.color,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Cảnh báo thiết bị ngoại tuyến (chỉ hiển thị nếu trạm OFFLINE) */}
+                {st.status === 'OFFLINE' && (
+                  <View style={styles.offlineNoticeBox}>
+                    <Text style={styles.offlineNoticeText}>
+                      Thiết bị ngoại tuyến · số liệu chưa được xác nhận
+                    </Text>
+                  </View>
+                )}
+
+                {/* Card Footer: Lần thu gom gần nhất */}
+                <View style={styles.lobbyFooter}>
+                  <Ionicons name="time-outline" size={13} color="#888" style={{ marginRight: 4 }} />
+                  <Text style={styles.lastCleanText}>
+                    Thu gom: {st.lastCleaned || 'Hôm nay, 15:25'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
 
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -325,6 +467,11 @@ const styles = StyleSheet.create({
     borderColor: '#a5d6a7',
     borderWidth: 1.5,
   },
+  statCardWarnBorder: {
+    borderColor: '#ffb74d',
+    borderWidth: 1.5,
+    backgroundColor: '#fffcf6',
+  },
   statNumberGreen: { fontSize: 24, fontWeight: 'bold', color: '#1b5e20' },
   statNumber: { fontSize: 24, fontWeight: 'bold', color: '#1b5e20' },
   statLabel: { fontSize: 11, color: '#666', marginTop: 4, fontWeight: '500' },
@@ -336,12 +483,65 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 8,
   },
   alertBannerOk: { backgroundColor: '#e8f5e9' },
   alertBannerWarn: { backgroundColor: '#ffebee' },
   alertBannerText: { fontSize: 12, fontWeight: '600', flex: 1 },
+
+  // Search Section
+  searchSection: {
+    marginBottom: 10,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 38,
+    borderWidth: 1,
+    borderColor: '#e2e8e2',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 12.5,
+    color: '#333',
+    paddingVertical: 0,
+  },
+
+  // Building Filter Chips
+  filterSection: {
+    marginBottom: 10,
+  },
+  filterScroll: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  filterChip: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterChipActive: {
+    backgroundColor: '#1b5e20',
+    borderColor: '#1b5e20',
+  },
+  filterChipText: {
+    fontSize: 12.5,
+    color: '#444',
+    fontWeight: '500',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 
   // Section Header
   sectionHeaderRow: {
@@ -422,4 +622,38 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   lastCleanText: { fontSize: 11, color: '#777' },
+
+  // Empty State
+  emptyContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 10,
+  },
+  emptySub: {
+    fontSize: 11.5,
+    color: '#777',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  resetFilterBtn: {
+    marginTop: 14,
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  resetFilterText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#1b5e20',
+  },
 });
