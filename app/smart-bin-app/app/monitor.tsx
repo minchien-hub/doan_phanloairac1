@@ -481,7 +481,7 @@ export default function MonitorScreen() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.doorTitle}>Cửa trạm · {currentLobby.building}</Text>
+                  <Text style={styles.doorTitle}>Cửa trạm rác</Text>
                   <Text
                     style={[
                       styles.doorStatusText,
