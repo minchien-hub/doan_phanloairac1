@@ -96,7 +96,7 @@ export default function StatisticsScreen() {
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTitle}>Giám Sát Trạm IoT</Text>
+            <Text style={styles.headerTitle}>Giám Sát Trạm Rác</Text>
             <Text style={styles.headerSubtitle}>{currentLobby.name}</Text>
           </View>
         </View>

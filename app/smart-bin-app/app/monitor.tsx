@@ -267,7 +267,7 @@ export default function MonitorScreen() {
             <View style={[styles.syncStatusBadge, isOffline && styles.syncStatusBadgeOffline]}>
               <View style={[styles.orangeDot, isOffline && styles.redDot]} />
               <Text style={[styles.syncStatusText, isOffline && styles.syncStatusTextOffline]}>
-                {isOffline ? 'MẤT KẾT NỐI IOT' : 'DỮ LIỆU ĐÃ ĐỒNG BỘ'}
+                {isOffline ? 'MẤT KẾT NỐI' : 'ĐÃ KẾT NỐI'}
               </Text>
             </View>
           </View>
@@ -286,7 +286,7 @@ export default function MonitorScreen() {
               ]}
             >
               {isOffline
-                ? 'Thiết bị ngoại tuyến · Đã ngắt nguồn hoặc mất mạng'
+                ? 'Chưa cắm điện hoặc mất kết nối mạng'
                 : `Dữ liệu cập nhật lúc ${timeUpdatedString}`}
             </Text>
           </View>
@@ -417,7 +417,7 @@ export default function MonitorScreen() {
           </View>
         </View>
 
-        {/* ===== ACCORDION 1: CAMERA AI PHÂN LOẠI RÁC ===== */}
+        {/* ===== ACCORDION 1: CAMERA NHẬN DIỆN RÁC ===== */}
         <View style={styles.accordionCard}>
           <TouchableOpacity
             style={styles.accordionHeader}
@@ -428,8 +428,8 @@ export default function MonitorScreen() {
               <Ionicons name="videocam-outline" size={20} color="#1b5e20" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.accordionTitle}>Camera AI phân loại rác</Text>
-              <Text style={styles.accordionSub}>Xem luồng camera tại điểm tập kết</Text>
+              <Text style={styles.accordionTitle}>Camera nhận diện rác</Text>
+              <Text style={styles.accordionSub}>Xem hình ảnh trực tiếp từ camera</Text>
             </View>
             <Ionicons
               name={isCameraExpanded ? 'chevron-up' : 'chevron-down'}
@@ -458,7 +458,7 @@ export default function MonitorScreen() {
                   <View style={styles.noCameraView}>
                     <Ionicons name="cloud-offline-outline" size={42} color="#888" />
                     <Text style={styles.noCameraTitle}>Không thể kết nối camera</Text>
-                    <Text style={styles.noCameraSub}>Kiểm tra mạng hoặc địa chỉ luồng camera.</Text>
+                    <Text style={styles.noCameraSub}>Vui lòng kiểm tra lại kết nối mạng hoặc nguồn điện camera.</Text>
                   </View>
                 )}
               </View>
@@ -480,7 +480,7 @@ export default function MonitorScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.accordionTitle}>Điều khiển cửa thả rác</Text>
               <Text style={styles.accordionSub}>
-                {currentLobby.is_door_open ? 'Cửa hiện đang mở' : 'Cửa hiện đang đóng'}
+                {isOffline ? 'Không thể mở/đóng khi mất kết nối' : currentLobby.is_door_open ? 'Cửa hiện đang mở' : 'Cửa hiện đang đóng'}
               </Text>
             </View>
             <Ionicons
@@ -513,7 +513,7 @@ export default function MonitorScreen() {
                       { color: isOffline ? '#d32f2f' : currentLobby.is_door_open ? '#1b5e20' : '#f57c00' },
                     ]}
                   >
-                    {isOffline ? 'Thiết bị ngoại tuyến' : currentLobby.is_door_open ? 'Đang mở' : 'Đang đóng'}
+                    {isOffline ? 'Đang mất kết nối' : currentLobby.is_door_open ? 'Đang mở' : 'Đang đóng'}
                   </Text>
                 </View>
                 <Switch
@@ -528,7 +528,7 @@ export default function MonitorScreen() {
           )}
         </View>
 
-        {/* ===== ACCORDION 3: CẢM BIẾN KHOẢNG CÁCH ===== */}
+        {/* ===== ACCORDION 3: CẢM BIẾN MỨC RÁC ===== */}
         <View style={styles.accordionCard}>
           <TouchableOpacity
             style={styles.accordionHeader}
@@ -539,8 +539,8 @@ export default function MonitorScreen() {
               <Ionicons name="speedometer-outline" size={20} color="#1b5e20" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.accordionTitle}>Cảm biến khoảng cách</Text>
-              <Text style={styles.accordionSub}>4 cảm biến tại trạm</Text>
+              <Text style={styles.accordionTitle}>Cảm biến mức rác</Text>
+              <Text style={styles.accordionSub}>Kiểm tra cảm biến 4 ngăn rác</Text>
             </View>
             <Ionicons
               name={isSensorExpanded ? 'chevron-up' : 'chevron-down'}
@@ -591,7 +591,7 @@ export default function MonitorScreen() {
               </View>
 
               <Text style={styles.realtimeNoticeText}>
-                Thông tin thiết bị được đồng bộ theo thời gian thực
+                Dữ liệu được cập nhật tự động liên tục
               </Text>
             </View>
           )}

@@ -110,7 +110,7 @@ export default function StationsScreen() {
       const targetSt = lobbies.find((l) => l.id === targetId);
       Alert.alert(
         'Thành công',
-        `Đã lưu cấu hình Wi-Fi (${wifiSsid}) cho trạm rác "${targetSt?.name || 'IoT'}"!`
+        `Đã lưu cấu hình Wi-Fi (${wifiSsid}) cho trạm rác "${targetSt?.name || 'Trạm rác'}"!`
       );
       setWifiSsid('');
       setWifiPassword('');
@@ -274,7 +274,7 @@ export default function StationsScreen() {
                       { color: isOffline ? '#d32f2f' : '#2e7d32' },
                     ]}
                   >
-                    {isOffline ? 'Ngoại tuyến' : 'Trực tuyến'}
+                    {isOffline ? 'Mất kết nối' : 'Đã kết nối'}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -426,7 +426,7 @@ export default function StationsScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.modalSub}>
-              Đồng bộ kết nối mạng Internet cho trạm phần cứng IoT.
+              Cài đặt kết nối mạng Wi-Fi cho trạm rác.
             </Text>
 
             <Text style={styles.inputLabel}>Chọn trạm rác áp dụng:</Text>

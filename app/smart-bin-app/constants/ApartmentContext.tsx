@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { get, onValue, push, ref, remove, set } from 'firebase/database';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth, db } from '../config/firebaseConfig';
 
 export interface UserProfile {
@@ -206,7 +206,7 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
         try {
           set(statusRef, 'OFFLINE');
           set(ref(db, 'smart_bin/lobbies/lobby_a/status'), 'OFFLINE');
-        } catch (e) {}
+        } catch (e) { }
       }
     }, 1000);
 
@@ -290,15 +290,15 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
           prev.map((lb) =>
             lb.isHardwareSync
               ? {
-                  ...lb,
-                  status: isOnline ? 'ONLINE' : 'OFFLINE',
-                  bins: {
-                    organic: { ...lb.bins.organic, sensor_ok: isOnline },
-                    recycle: { ...lb.bins.recycle, sensor_ok: isOnline },
-                    non_recycle: { ...lb.bins.non_recycle, sensor_ok: isOnline },
-                    hazardous: { ...lb.bins.hazardous, sensor_ok: isOnline },
-                  },
-                }
+                ...lb,
+                status: isOnline ? 'ONLINE' : 'OFFLINE',
+                bins: {
+                  organic: { ...lb.bins.organic, sensor_ok: isOnline },
+                  recycle: { ...lb.bins.recycle, sensor_ok: isOnline },
+                  non_recycle: { ...lb.bins.non_recycle, sensor_ok: isOnline },
+                  hazardous: { ...lb.bins.hazardous, sensor_ok: isOnline },
+                },
+              }
               : lb
           )
         );
@@ -489,7 +489,7 @@ export function SmartBinProvider({ children }: { children: React.ReactNode }) {
           });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const updateLobbyThreshold = async (lobbyId: string, threshold: number) => {

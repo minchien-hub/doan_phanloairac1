@@ -3,9 +3,11 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -19,10 +21,17 @@ export default function HomeScreen() {
     hasWarning,
     notifyEnabled,
     setSelectedLobbyId,
+    addLobby,
   } = useSmartBin();
 
   const [filterOnlyNeedClean, setFilterOnlyNeedClean] = useState<boolean>(false);
   const alertedStationsRef = useRef<Set<string>>(new Set());
+
+  // ===== MODAL THÊM ĐIỂM TẬP KẾT MỚI =====
+  const [addLobbyModalVisible, setAddLobbyModalVisible] = useState(false);
+  const [newLobbyName, setNewLobbyName] = useState('');
+  const [newLobbyBuilding, setNewLobbyBuilding] = useState('Tòa A');
+  const [newLobbyLocation, setNewLobbyLocation] = useState('');
 
   // Thống kê điểm tập kết đầy hoặc có nguy cơ
   const fullLobbies = lobbies.filter((st) => {
@@ -93,6 +102,9 @@ export default function HomeScreen() {
 
   // Trạng thái tổng quan của trạm
   const getLobbyOverallStatus = (st: Lobby) => {
+    if (st.status === 'OFFLINE') {
+      return { text: 'Mất kết nối', color: '#d32f2f', bg: '#ffebee', isFull: false };
+    }
     if (!st.bins || Object.keys(st.bins).length === 0) {
       return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
     }
@@ -107,6 +119,37 @@ export default function HomeScreen() {
       return { text: 'Sắp đầy', color: '#f57c00', bg: '#fff3e0', isFull: false };
     }
     return { text: 'Bình thường', color: '#2e7d32', bg: '#e8f5e9', isFull: false };
+  };
+
+  // Thêm trạm rác / điểm tập kết mới
+  const handleCreateLobby = async () => {
+    if (!newLobbyName.trim() || !newLobbyLocation.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ tên điểm tập kết và vị trí!');
+      return;
+    }
+
+    try {
+      await addLobby({
+        name: newLobbyName.trim(),
+        building: newLobbyBuilding.trim(),
+        location: newLobbyLocation.trim(),
+        status: 'OFFLINE',
+        lastCleaned: 'Hôm nay',
+        bins: {
+          organic: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+          recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+          non_recycle: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+          hazardous: { fill_percent: 0, distance_cm: 50, status: 'NORMAL', sensor_ok: false },
+        },
+      });
+
+      Alert.alert('Thành công', `Đã thêm điểm tập kết "${newLobbyName}" vào hệ thống!`);
+      setNewLobbyName('');
+      setNewLobbyLocation('');
+      setAddLobbyModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Lỗi', 'Không thể thêm điểm tập kết: ' + err.message);
+    }
   };
 
   return (
@@ -191,10 +234,15 @@ export default function HomeScreen() {
         {/* ===== SECTION HEADER ROW ===== */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Các điểm tập kết</Text>
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>Đang đồng bộ</Text>
-          </View>
+          {/* Nút dấu cộng (+) thêm trạm rác mới thay thế cho chữ 'Đang đồng bộ' */}
+          <TouchableOpacity
+            style={styles.addStationHeaderBtn}
+            onPress={() => setAddLobbyModalVisible(true)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         {/* ===== DANH SÁCH ĐIỂM TẬP KẾT HOẶC TRẠNG THÁI TRỐNG ===== */}
@@ -296,11 +344,11 @@ export default function HomeScreen() {
                   })}
                 </View>
 
-                {/* Cảnh báo thiết bị ngoại tuyến (chỉ hiển thị nếu trạm OFFLINE) */}
+                {/* Cảnh báo khi trạm mất kết nối (chỉ hiển thị nếu trạm OFFLINE) */}
                 {st.status === 'OFFLINE' && (
                   <View style={styles.offlineNoticeBox}>
                     <Text style={styles.offlineNoticeText}>
-                      Thiết bị ngoại tuyến · số liệu chưa được xác nhận
+                      Trạm đang ngắt kết nối · Chưa cập nhật dữ liệu mới
                     </Text>
                   </View>
                 )}
@@ -319,6 +367,59 @@ export default function HomeScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* ===== MODAL: THÊM ĐIỂM TẬP KẾT MỚI ===== */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={addLobbyModalVisible}
+        onRequestClose={() => setAddLobbyModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm Điểm Tập Kết Mới</Text>
+              <TouchableOpacity onPress={() => setAddLobbyModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSub}>
+              Điểm tập kết mới sẽ được thêm vào hệ thống và theo dõi tự động cả 4 ngăn phân loại rác.
+            </Text>
+
+            <Text style={styles.inputLabel}>Tên điểm tập kết / trạm rác:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="VD: Sảnh Tòa A, Điểm Cổng Số 2..."
+              placeholderTextColor="#999"
+              value={newLobbyName}
+              onChangeText={setNewLobbyName}
+            />
+
+            <Text style={styles.inputLabel}>Tòa nhà / Phân khu:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="VD: Tòa A hoặc Khối Thương Mại"
+              placeholderTextColor="#999"
+              value={newLobbyBuilding}
+              onChangeText={setNewLobbyBuilding}
+            />
+
+            <Text style={styles.inputLabel}>Vị trí cụ thể đặt trạm:</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="VD: Tầng G - Cạnh thang máy số 1"
+              placeholderTextColor="#999"
+              value={newLobbyLocation}
+              onChangeText={setNewLobbyLocation}
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleCreateLobby}>
+              <Text style={styles.saveButtonText}>Thêm Điểm Tập Kết</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -416,9 +517,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1b5e20' },
-  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4caf50' },
-  liveText: { fontSize: 12, color: '#2e7d32', fontWeight: '600' },
+  addStationHeaderBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1b5e20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
 
   // Collection Point Cards
   lobbyCard: {
@@ -520,4 +631,40 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1b5e20',
   },
+
+  // Modal Thêm Điểm Mới
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 18, elevation: 5 },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', color: '#1b5e20' },
+  modalSub: { fontSize: 11, color: '#666', marginBottom: 12, lineHeight: 16 },
+  inputLabel: { fontSize: 12, fontWeight: 'bold', color: '#333', marginBottom: 4, marginTop: 8 },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 42,
+    fontSize: 13,
+    backgroundColor: '#fafafa',
+  },
+  saveButton: {
+    backgroundColor: '#1b5e20',
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  saveButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 });
